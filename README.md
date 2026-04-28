@@ -1,11 +1,40 @@
-<div align="center">
+# AI Trio Hub - Personal AI Assistant
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Това е пълнофункционално full-stack приложение, разработено за Тихомир Колев, което интегрира React (Vite) и Express (Node.js).
 
-  <h1>Built with AI Studio</h2>
+## 🧠 Функционалност
+Приложението е проектирано като **Персонален Команден Център**, базиран на три стълба:
+1.  **AI Анализ (Gemini AI)**: Обработка на сложни данни и генериране на стратегически планове.
+2.  **Дигитален Скенер (OCR & Media)**: Вкарване на данни чрез камера в реално време и качване на файлове.
+3.  **Синхронизация на работни потоци (ClickUp)**: Единен интерфейс за управление на задачи.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 🛠️ Технически детайли
+- **Индустриални профили**: Динамична промяна на AI контекста според избраната сфера (Строителство, Кино, Земеделие, Здравеопазване).
+- **GDPR съвместимост**: Локално съхранение на данни и функция за пълно изтриване (Purge Data).
+- **Frontend**: React 19, Tailwind CSS, Framer Motion (анимации), Lucide Icons.
+- **Backend**: Express.js сървър, обслужващ API маршрути и Vite middleware за развитие.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## 🚀 Стартиране на проекта
 
-</div>
+### 1. Инсталация
+```bash
+npm install
+```
+
+### 2. Конфигурация
+Създайте `.env` файл с вашия ключ:
+```env
+GEMINI_API_KEY=вашият_ключ
+```
+
+### 3. Разработка (Development)
+```bash
+npm run dev
+```
+Сървърът работи на [http://localhost:3000](http://localhost:3000).
+
+### 4. Продукция (Production)
+```bash
+npm run build
+npm start
+```

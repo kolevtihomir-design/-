@@ -1,0 +1,6 @@
+{
+  "name": "AI Trio Hub",
+  "description": "Enterprise workflow automation hub integrating ClickUp, Gemini AI, and NotebookLM sync.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": []
+}

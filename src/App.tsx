@@ -87,7 +87,7 @@ export default function App() {
       if (data.success) {
         setDemoResult(data.product);
         setView('result');
-        await sleep(800);
+        await sleep(2500);
         setShowPaywall(true);
       }
     } catch (e) {
@@ -204,7 +204,7 @@ export default function App() {
               </span>
             ) : (
               <button onClick={() => setShowPaywall(true)} className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors">
-                0.99 EUR / месец →
+                от 9.90 EUR / месец →
               </button>
             )}
           </div>
@@ -348,7 +348,7 @@ export default function App() {
                 </div>
                 <p className="text-xs text-gray-400 mt-4 text-center">
                   При 1 поръчка/месец → <span className="text-white font-bold">{fmt(demoResult.roi_annual_eur)} годишна икономия</span>
-                  {' '}срещу само <span className="text-white font-bold">0.99 EUR/месец</span> за достъп
+                  {' '}срещу само <span className="text-white font-bold">9.90 EUR/месец</span> за достъп
                 </p>
               </div>
             </div>
@@ -373,7 +373,7 @@ export default function App() {
 
             <button onClick={() => setShowPaywall(true)}
               className="w-full py-5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-lg tracking-wide hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30">
-              Отключи пълния достъп — 0.99 EUR
+              Отключи пълния достъп — от 9.90 EUR
               <ArrowRight size={20} />
             </button>
           </motion.div>
@@ -672,7 +672,7 @@ export default function App() {
                 <X size={20} />
               </button>
 
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
                   <Package size={24} />
                 </div>
@@ -682,49 +682,52 @@ export default function App() {
 
               {/* ROI summary in paywall */}
               {demoResult && (
-                <div className="bg-green-500/8 border border-green-500/15 rounded-2xl p-4 mb-6">
-                  <div className="text-xs text-green-400 font-bold mb-2">ТОЙ САМО ЩЕ ВЪРНЕ ВЛОЖЕНОТО:</div>
+                <div className="bg-green-500/8 border border-green-500/15 rounded-2xl p-4 mb-5">
+                  <div className="text-xs text-green-400 font-bold mb-2">ВЪЗ ОСНОВА НА ДЕМОТО ТИ:</div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Спестено (1 поръчка)</span>
                     <span className="font-bold text-green-400">{fmt(demoResult.savings_eur)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-1">
-                    <span className="text-gray-400">Цена на достъп</span>
-                    <span className="font-bold text-white">0.99 EUR</span>
+                    <span className="text-gray-400">Годишни спестявания</span>
+                    <span className="font-bold text-green-400">{fmt(demoResult.roi_annual_eur)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-1 pt-2 border-t border-white/5">
-                    <span className="text-gray-400">ROI от 1 поръчка</span>
-                    <span className="font-black text-green-400">{Math.round(demoResult.savings_eur / 0.99)}x</span>
+                    <span className="text-gray-400">ROI на Стартер план (9.90 EUR)</span>
+                    <span className="font-black text-green-400">{Math.round(demoResult.savings_eur / 9.9)}x</span>
                   </div>
                 </div>
               )}
 
-              <div className="space-y-3 mb-8">
+              {/* Pricing plans */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
                 {[
-                  'Неограничени B2B търсения (MiniSearch)',
-                  'DHL Logistics — реална sandbox API',
-                  'Keepa Price Audit — пазарни данни',
-                  'AI Препоръки — HuggingFace all-MiniLM-L6-v2',
-                  'ROI Аналитика в реално време',
-                ].map(item => (
-                  <div key={item} className="flex items-center gap-3 text-sm text-gray-300">
-                    <CheckCircle size={14} className="text-green-400 flex-shrink-0" /> {item}
-                  </div>
+                  { name: 'Стартер', price: '9.90', desc: '50 търсения/месец', highlight: false },
+                  { name: 'Про', price: '49', desc: 'Неограничени + AI', highlight: true },
+                ].map(plan => (
+                  <button key={plan.name} onClick={handleCheckout} disabled={checkoutLoading}
+                    className={`p-4 rounded-2xl border text-left transition-all ${plan.highlight
+                      ? 'border-blue-500/60 bg-blue-500/10 hover:bg-blue-500/20'
+                      : 'border-white/10 bg-white/3 hover:bg-white/7'}`}>
+                    <div className={`text-xs font-bold mb-1 ${plan.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{plan.name}</div>
+                    <div className="text-xl font-black">{plan.price} <span className="text-sm font-normal text-gray-400">EUR/мес.</span></div>
+                    <div className="text-xs text-gray-500 mt-1">{plan.desc}</div>
+                  </button>
                 ))}
               </div>
 
               <button onClick={handleCheckout} disabled={checkoutLoading}
-                className="w-full py-5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-lg hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30 disabled:opacity-50">
+                className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30 disabled:opacity-50">
                 {checkoutLoading ? <Loader2 size={20} className="animate-spin" /> : (
                   <>
-                    Плати 0.99 EUR — Stripe Checkout
+                    Стартирай сега — Stripe Checkout
                     <ArrowRight size={20} />
                   </>
                 )}
               </button>
 
-              <p className="text-center text-xs text-gray-600 mt-4 flex items-center justify-center gap-2">
-                <ShieldCheck size={12} /> Защитено плащане · Stripe · Без автоматично подновяване
+              <p className="text-center text-xs text-gray-600 mt-3 flex items-center justify-center gap-2">
+                <ShieldCheck size={12} /> Защитено плащане · Stripe · Отказ по всяко време
               </p>
             </motion.div>
           </motion.div>

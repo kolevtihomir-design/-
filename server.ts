@@ -108,7 +108,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
           }],
           output_currency: 'EUR',
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(1500),
       });
 
       if (res.ok) {
@@ -144,7 +144,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
         weight_kg: weightKg,
         mode: 'air',
       }),
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(1500),
     });
 
     if (res.ok) {
@@ -187,7 +187,7 @@ async function getKeepaPrice(productName: string, factoryPrice: number) {
   if (SERPAPI_KEY) {
     try {
       const url = `https://serpapi.com/search.json?engine=google_shopping&q=${encodeURIComponent(productName)}&gl=de&hl=de&currency=EUR&api_key=${SERPAPI_KEY}`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
 
       if (res.ok) {
         const data = await res.json() as any;
@@ -278,7 +278,7 @@ async function getMLRecommendations(query: string, excludeId: string, limit = 5)
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ inputs: { source_sentence: query, sentences } }),
-          signal: AbortSignal.timeout(12000),
+          signal: AbortSignal.timeout(1500),
         }
       );
 
@@ -317,7 +317,7 @@ async function webSearch(query: string) {
       const url = `${instance}/search?q=${encodeURIComponent(query + ' price wholesale supplier')}&format=json&categories=general&language=en-US`;
       const res = await fetch(url, {
         headers: { 'User-Agent': 'AI-Pokupki B2B Search/1.0' },
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(1500),
       });
       if (res.ok) {
         const data = await res.json() as any;
@@ -470,11 +470,11 @@ async function startServer() {
           price_data: {
             currency: 'eur',
             product_data: {
-              name: 'AI-Pokupki — Пълен достъп (1 месец)',
-              description: 'Неограничени B2B търсения, AI препоръки, DHL логистика, ценов одит',
+              name: 'AI-Pokupki Стартер — 1 месец',
+              description: '50 B2B търсения/месец, AI препоръки, DHL логистика, ценов одит',
               images: [],
             },
-            unit_amount: 99, // 0.99 EUR in cents
+            unit_amount: 990, // 9.90 EUR in cents
           },
           quantity: 1,
         }],
@@ -488,7 +488,10 @@ async function startServer() {
       res.json({ success: true, url: session.url, session_id: session.id });
     } catch (e: any) {
       console.error('Stripe error:', e.message);
-      // Test mode fallback — grant access directly
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(500).json({ error: 'Payment service unavailable', message: e.message });
+      }
+      // Dev mode only — grant access directly without payment
       const testToken = 'test_' + Date.now();
       paidSessions.add(testToken);
       analytics.paid_searches++;

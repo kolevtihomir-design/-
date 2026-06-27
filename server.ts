@@ -87,7 +87,11 @@ async function getDHLLogistics(product: string, weightKg: number) {
   const EASYSHIP_KEY = process.env.EASYSHIP_API_KEY;
   if (EASYSHIP_KEY) {
     try {
-      const res = await fetch('https://public-api.easyship.com/2024-09/rates', {
+      const isSandbox = EASYSHIP_KEY.startsWith('sand_');
+      const baseUrl = isSandbox
+        ? 'https://public-api-sandbox.easyship.com'
+        : 'https://public-api.easyship.com';
+      const res = await fetch(`${baseUrl}/2024-09/rates`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${EASYSHIP_KEY}`,

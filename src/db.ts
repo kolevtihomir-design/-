@@ -1,11 +1,14 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')
+  ? fileURLToPath(import.meta.url)
+  : process.argv[1];
+const __dirname = path.dirname(__filename);
 const DB_PATH = path.join(__dirname, '..', 'data', 'pokupki.db');
 
-import fs from 'fs';
 fs.mkdirSync(path.join(__dirname, '..', 'data'), { recursive: true });
 
 export const db = new Database(DB_PATH);

@@ -5,6 +5,7 @@ import {
   CheckCircle, ArrowRight, Star, Package, Globe,
   ShieldCheck, X, ChevronDown, Loader2, MapPin, Clock,
   DollarSign, AlertTriangle, ExternalLink, RefreshCw,
+  Settings, Plus, Pencil, Trash2, Save, Lock,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -45,6 +46,19 @@ export default function App() {
   const [fullSearchQuery, setFullSearchQuery] = useState('');
   const [tabLoading, setTabLoading] = useState(false);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
+
+  // Admin state
+  const [adminKey, setAdminKey] = useState('');
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminProducts, setAdminProducts] = useState<any[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminMsg, setAdminMsg] = useState('');
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '', category: '', supplier: '', factory_price: '', negotiated_price: '',
+    discount_pct: '30', delivery_days: '10', warehouse: 'Шенджен, CN', moq: '1', weight_kg: '5', tags: '',
+  });
 
   useEffect(() => {
     const t = setInterval(() => setPlaceholderIdx(i => (i + 1) % DEMO_QUERIES.length), 3000);
@@ -175,6 +189,63 @@ export default function App() {
     } finally {
       setTabLoading(false);
     }
+  };
+
+  // ── Admin helpers ─────────────────────────────────────────
+  const adminFetch = (path: string, opts: RequestInit = {}) =>
+    fetch(path, { ...opts, headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+
+  const loadAdminProducts = async () => {
+    setAdminLoading(true);
+    try {
+      const r = await adminFetch('/api/admin/products');
+      if (r.status === 401) { setAdminAuthed(false); setAdminMsg('Грешна парола.'); return; }
+      const d = await r.json();
+      setAdminProducts(d.products || []);
+      setAdminAuthed(true);
+      setAdminMsg('');
+    } catch { setAdminMsg('Грешка при зареждане.'); }
+    finally { setAdminLoading(false); }
+  };
+
+  const handleAdminLogin = async () => {
+    if (!adminKey.trim()) return;
+    await loadAdminProducts();
+  };
+
+  const handleDeleteProduct = async (id: number) => {
+    if (!confirm('Изтриване на продукта?')) return;
+    await adminFetch(`/api/admin/products/${id}`, { method: 'DELETE' });
+    setAdminMsg('Изтрит.'); loadAdminProducts();
+  };
+
+  const handleSaveProduct = async () => {
+    if (!newProduct.name || !newProduct.factory_price) return;
+    const body = {
+      ...newProduct,
+      factory_price: parseFloat(newProduct.factory_price),
+      negotiated_price: parseFloat(newProduct.negotiated_price) || parseFloat(newProduct.factory_price) * 0.7,
+      discount_pct: parseFloat(newProduct.discount_pct),
+      delivery_days: parseInt(newProduct.delivery_days),
+      moq: parseInt(newProduct.moq),
+      weight_kg: parseFloat(newProduct.weight_kg),
+    };
+    if (editingProduct) {
+      await adminFetch(`/api/admin/products/${editingProduct.id}`, { method: 'PUT', body: JSON.stringify(body) });
+      setAdminMsg('Обновен.');
+    } else {
+      await adminFetch('/api/admin/products', { method: 'POST', body: JSON.stringify(body) });
+      setAdminMsg('Добавен.');
+    }
+    setShowAddForm(false); setEditingProduct(null);
+    setNewProduct({ name: '', category: '', supplier: '', factory_price: '', negotiated_price: '', discount_pct: '30', delivery_days: '10', warehouse: 'Шенджен, CN', moq: '1', weight_kg: '5', tags: '' });
+    loadAdminProducts();
+  };
+
+  const startEdit = (p: any) => {
+    setEditingProduct(p);
+    setNewProduct({ name: p.name, category: p.category, supplier: p.supplier, factory_price: String(p.factory_price), negotiated_price: String(p.negotiated_price), discount_pct: String(p.discount_pct), delivery_days: String(p.delivery_days), warehouse: p.warehouse, moq: String(p.moq), weight_kg: String(p.weight_kg), tags: p.tags });
+    setShowAddForm(true);
   };
 
   // ── RENDER ────────────────────────────────────────────────
@@ -392,9 +463,10 @@ export default function App() {
                 { id: 'prices', label: 'Ценов Одит', icon: BarChart3 },
                 { id: 'ai', label: 'AI Препоръки', icon: Brain },
                 { id: 'analytics', label: 'Аналитика', icon: TrendingDown },
+                { id: 'admin', label: 'Admin', icon: Settings },
               ].map(({ id, label, icon: Icon }) => (
-                <button key={id} onClick={() => setActiveTab(id as any)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === id ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'text-gray-500 hover:text-white'}`}>
+                <button key={id} onClick={() => { setActiveTab(id as any); if (id === 'admin' && adminAuthed) loadAdminProducts(); }}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === id ? (id === 'admin' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30' : 'bg-blue-500 text-white shadow-lg shadow-blue-500/30') : 'text-gray-500 hover:text-white'}`}>
                   <Icon size={15} /> {label}
                 </button>
               ))}
@@ -651,6 +723,130 @@ export default function App() {
                         </span>.
                       </p>
                     </div>
+                  </motion.div>
+                )}
+                {/* Admin Tab */}
+                {activeTab === 'admin' && (
+                  <motion.div key="admin-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    {!adminAuthed ? (
+                      <div className="max-w-sm mx-auto py-16 text-center">
+                        <div className="w-16 h-16 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                          <Lock size={28} className="text-orange-400" />
+                        </div>
+                        <h3 className="text-xl font-black mb-2">Admin достъп</h3>
+                        <p className="text-gray-500 text-sm mb-6">Въведи ADMIN_PASSWORD за управление на каталога</p>
+                        <input type="password" value={adminKey} onChange={e => setAdminKey(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
+                          placeholder="Admin парола..."
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500/50 text-sm mb-3" />
+                        {adminMsg && <p className="text-red-400 text-xs mb-3">{adminMsg}</p>}
+                        <button onClick={handleAdminLogin} disabled={adminLoading}
+                          className="w-full py-3 bg-orange-500 rounded-xl font-bold text-sm hover:bg-orange-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                          {adminLoading ? <Loader2 size={16} className="animate-spin" /> : <><Lock size={16} /> Влез</>}
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* Admin toolbar */}
+                        <div className="flex items-center justify-between mb-6">
+                          <div>
+                            <h3 className="font-black text-lg">Каталог управление</h3>
+                            <p className="text-xs text-gray-500">{adminProducts.length} активни продукта · SQLite DB</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={loadAdminProducts} className="p-2.5 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all">
+                              <RefreshCw size={15} className="text-gray-400" />
+                            </button>
+                            <button onClick={() => { setEditingProduct(null); setShowAddForm(true); }}
+                              className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 rounded-xl font-bold text-sm hover:bg-orange-400 transition-all">
+                              <Plus size={15} /> Нов продукт
+                            </button>
+                          </div>
+                        </div>
+
+                        {adminMsg && (
+                          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2.5 text-green-400 text-sm mb-4">
+                            {adminMsg}
+                          </div>
+                        )}
+
+                        {/* Add/Edit form */}
+                        {showAddForm && (
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                            className="bg-white/3 border border-orange-500/20 rounded-2xl p-6 mb-6">
+                            <h4 className="font-bold mb-4 text-orange-400">{editingProduct ? 'Редактирай продукт' : 'Нов продукт'}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {[
+                                { key: 'name', label: 'Наименование *', full: true },
+                                { key: 'category', label: 'Категория *' },
+                                { key: 'supplier', label: 'Доставчик' },
+                                { key: 'factory_price', label: 'Фабрична цена EUR *', type: 'number' },
+                                { key: 'negotiated_price', label: 'Договорена цена EUR', type: 'number' },
+                                { key: 'discount_pct', label: 'Отстъпка %', type: 'number' },
+                                { key: 'delivery_days', label: 'Доставка (дни)', type: 'number' },
+                                { key: 'warehouse', label: 'Склад' },
+                                { key: 'moq', label: 'MOQ (мин. количество)', type: 'number' },
+                                { key: 'weight_kg', label: 'Тегло (кг)', type: 'number' },
+                                { key: 'tags', label: 'Тагове (с интервал)', full: true },
+                              ].map(({ key, label, type, full }) => (
+                                <div key={key} className={full ? 'md:col-span-2' : ''}>
+                                  <label className="block text-xs text-gray-500 mb-1">{label}</label>
+                                  <input
+                                    type={type || 'text'}
+                                    value={(newProduct as any)[key]}
+                                    onChange={e => setNewProduct(p => ({ ...p, [key]: e.target.value }))}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/40"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex gap-3 mt-4">
+                              <button onClick={handleSaveProduct}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 rounded-xl font-bold text-sm hover:bg-orange-400 transition-all">
+                                <Save size={14} /> {editingProduct ? 'Запази' : 'Добави'}
+                              </button>
+                              <button onClick={() => { setShowAddForm(false); setEditingProduct(null); }}
+                                className="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm hover:bg-white/10 transition-all">
+                                Отказ
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Products table */}
+                        {adminLoading ? (
+                          <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin text-orange-400" size={28} /></div>
+                        ) : (
+                          <div className="space-y-2">
+                            {adminProducts.map((p: any) => (
+                              <div key={p.id} className="bg-white/3 border border-white/8 rounded-xl px-5 py-3.5 flex items-center gap-4 hover:border-white/15 transition-all">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-full shrink-0">{p.category}</span>
+                                    <span className="font-semibold text-sm truncate">{p.name}</span>
+                                  </div>
+                                  <p className="text-xs text-gray-600">{p.supplier} · MOQ {p.moq} · {p.weight_kg}кг</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="font-black text-sm">{fmt(p.negotiated_price)}</div>
+                                  <div className="text-xs text-green-400">-{p.discount_pct}%</div>
+                                </div>
+                                <div className="flex gap-1.5 shrink-0">
+                                  <button onClick={() => startEdit(p)}
+                                    className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-all">
+                                    <Pencil size={13} className="text-blue-400" />
+                                  </button>
+                                  <button onClick={() => handleDeleteProduct(p.id)}
+                                    className="p-2 bg-red-500/10 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-all">
+                                    <Trash2 size={13} className="text-red-400" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

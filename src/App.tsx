@@ -1,720 +1,735 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { useState, ChangeEvent, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  MessageCircle,
-  MessageSquare,
-  Smartphone,
-  Send,
-  Layout, 
-  BookOpen, 
-  Settings, 
-  Search, 
-  ChevronRight,
-  Cpu,
-  RefreshCw,
-  Heart,
-  Mic,
-  Volume2,
-  Menu,
-  X,
-  Camera,
-  Upload,
-  Image,
-  FileText,
-  Zap
+import {
+  Search, TrendingDown, Truck, BarChart3, Brain, Zap,
+  CheckCircle, ArrowRight, Star, Package, Globe,
+  ShieldCheck, X, ChevronDown, Loader2, MapPin, Clock,
+  DollarSign, AlertTriangle, ExternalLink, RefreshCw,
 } from 'lucide-react';
 
+// ─── Types ───────────────────────────────────────────────────
+interface Product {
+  id: string; name: string; category: string; supplier: string;
+  factory_price: number; negotiated_price: number; discount_pct: number;
+  delivery_days: number; warehouse: string; moq: number; weight_kg: number;
+  savings_eur: number; roi_annual_eur: number;
+}
+interface Logistics { source: string; route: string; service: string; delivery_days: number; cost_eur: number; }
+interface PriceAudit { source: string; amazon_price_eur: number; factory_price_eur: number; our_price_eur: number; savings_vs_amazon_pct: number; market_position: string; }
+interface Recommendation { id: string; name: string; category: string; negotiated_price: number; discount_pct: number; ml_score: number; model: string; }
+interface Analytics { total_searches: number; paid_searches: number; total_savings_eur: number; total_orders: number; avg_discount_pct: number; demo_to_paid_rate: number; }
+
+// ─── Helpers ─────────────────────────────────────────────────
+const fmt = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// ─── Demo queries ─────────────────────────────────────────────
+const DEMO_QUERIES = ['хидравлична помпа', 'компресор', 'led прожектор', 'заваръчен апарат', 'cnc рутер'];
+
+// ─── Main App ─────────────────────────────────────────────────
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isOnboarded, setIsOnboarded] = useState(false);
-  const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
-  const [systemStatus, setSystemStatus] = useState({ openRouter: false, clickUp: false });
-  const [aiResponse, setAiResponse] = useState('Приятно ми е да те видя отново, Тихомир. Всички системи са в пълна бойна готовност за твоите успехи днес.');
-
-  const industries = [
-    { id: 'construction', label: 'Строителство', icon: Zap, desc: 'Управление на обекти и логистика' },
-    { id: 'cinema', label: 'Кино', icon: Camera, desc: 'Продукция и творчески екипи' },
-    { id: 'agriculture', label: 'Земеделие', icon: Heart, desc: 'Култури и ресурсен мениджмънт' },
-    { id: 'healthcare', label: 'Здраве', icon: Heart, desc: 'Пациенти и медицински протоколи' },
-  ];
-
-  const handleOnboard = (id: string) => {
-    setSelectedIndustry(id);
-    setIsOnboarded(true);
-    const indName = industries.find(ind => ind.id === id)?.label;
-    setAiResponse(`Системата е конфигурирана за индустрия: ${indName}. Готов съм да анализирам твоите специфични данни, Тихомир.`);
-  };
-
-  const checkStatus = () => {
-    fetch('/api/status')
-      .then(res => res.json())
-      .then(data => setSystemStatus(data))
-      .catch(console.error);
-  };
+  const [view, setView] = useState<'search' | 'result' | 'platform'>('search');
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [demoResult, setDemoResult] = useState<Product | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [accessToken, setAccessToken] = useState('');
+  const [activeTab, setActiveTab] = useState<'search' | 'logistics' | 'prices' | 'ai' | 'analytics'>('search');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [logisticsData, setLogisticsData] = useState<Logistics | null>(null);
+  const [priceData, setPriceData] = useState<PriceAudit | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<Analytics | null>(null);
+  const [fullSearchResults, setFullSearchResults] = useState<Product[]>([]);
+  const [fullSearchQuery, setFullSearchQuery] = useState('');
+  const [tabLoading, setTabLoading] = useState(false);
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
 
   useEffect(() => {
-    checkStatus();
-    console.log("AI Trio Hub Booted | Production Ready");
+    const t = setInterval(() => setPlaceholderIdx(i => (i + 1) % DEMO_QUERIES.length), 3000);
+    return () => clearInterval(t);
   }, []);
-  const [isAsking, setIsAsking] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [notebookPages, setNotebookPages] = useState<any[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  const playSignal = () => {
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-    gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + 0.15);
-  };
+  // Restore session
+  useEffect(() => {
+    const saved = localStorage.getItem('ai_pokupki_token');
+    if (saved) {
+      fetch(`/api/verify/${saved}`).then(r => r.json()).then(d => {
+        if (d.paid) { setHasAccess(true); setAccessToken(saved); setView('platform'); }
+      }).catch(() => {});
+    }
+    // Check for Stripe redirect
+    const params = new URLSearchParams(location.search);
+    const sid = params.get('session_id');
+    if (sid) {
+      fetch(`/api/verify/${sid}`).then(r => r.json()).then(d => {
+        if (d.paid) {
+          localStorage.setItem('ai_pokupki_token', d.token);
+          setHasAccess(true); setAccessToken(d.token); setView('platform');
+          history.replaceState({}, '', '/');
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
-  const processUnified = async (input: string, type: string) => {
-    setIsProcessing(true);
-    setAiResponse('Стартирам AI Trio Hub верига: Мозък -> NotebookLM -> ClickUp...');
-    
+  // ── Demo Search ───────────────────────────────────────────
+  const handleDemoSearch = useCallback(async (q?: string) => {
+    const searchQuery = q || query;
+    if (!searchQuery.trim()) return;
+    setLoading(true);
     try {
-      const res = await fetch('/api/unified-process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input, type })
+      const res = await fetch('/api/search/demo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery }),
       });
       const data = await res.json();
-      
-      if (data.status === 'success') {
-        setNotebookPages(prev => [data.notebook, ...prev]);
-        setAiResponse(`Готово! Задача "${data.analysis.title}" е анализирана, записана в бележника и пратена в ClickUp. Напомняне: ${new Date(data.reminder).toLocaleTimeString()}`);
-        playSignal();
+      if (data.success) {
+        setDemoResult(data.product);
+        setView('result');
+        await sleep(800);
+        setShowPaywall(true);
       }
-    } catch (err) {
-      setAiResponse('Грешка при синхронизацията. Провери връзката.');
+    } catch (e) {
+      alert('Грешка при търсене. Моля опитайте отново.');
     } finally {
-      setIsProcessing(false);
+      setLoading(false);
     }
-  };
+  }, [query]);
 
-  const startCamera = async () => {
+  // ── Checkout ──────────────────────────────────────────────
+  const handleCheckout = async () => {
+    setCheckoutLoading(true);
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      setStream(mediaStream);
-    } catch (err) {
-      console.error("Camera error:", err);
-      alert("Моля, разрешете достъп до камерата.");
+      const res = await fetch('/api/checkout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: '' }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else if (data.test_token) {
+        // Test mode — grant access immediately
+        localStorage.setItem('ai_pokupki_token', data.test_token);
+        setAccessToken(data.test_token);
+        setHasAccess(true);
+        setShowPaywall(false);
+        setView('platform');
+        loadPlatformData(data.test_token);
+      }
+    } catch (e) {
+      alert('Грешка при плащане. Моля опитайте отново.');
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
+  // ── Load platform data ────────────────────────────────────
+  const loadPlatformData = useCallback(async (token?: string) => {
+    const t = token || accessToken;
+    setTabLoading(true);
+    try {
+      const [logRes, priceRes, recRes, analyticsRes] = await Promise.all([
+        fetch('/api/logistics', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_name: demoResult?.name || 'industrial equipment', weight_kg: demoResult?.weight_kg || 10 }),
+        }).then(r => r.json()),
+        fetch('/api/prices', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_name: demoResult?.name || 'industrial pump', factory_price: demoResult?.factory_price || 1000 }),
+        }).then(r => r.json()),
+        fetch('/api/recommendations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: demoResult?.name || query, product_id: demoResult?.id }),
+        }).then(r => r.json()),
+        fetch('/api/analytics').then(r => r.json()),
+      ]);
+      if (logRes.success) setLogisticsData(logRes.logistics);
+      if (priceRes.success) setPriceData(priceRes.price_audit);
+      if (recRes.success) setRecommendations(recRes.recommendations);
+      if (analyticsRes.success) setAnalyticsData(analyticsRes);
+    } catch (e) {
+      console.error('Platform data error:', e);
+    } finally {
+      setTabLoading(false);
+    }
+  }, [accessToken, demoResult, query]);
+
+  useEffect(() => {
+    if (view === 'platform' && hasAccess) loadPlatformData();
+  }, [view]);
+
+  // ── Full search (paid) ────────────────────────────────────
+  const handleFullSearch = async () => {
+    if (!fullSearchQuery.trim()) return;
+    setTabLoading(true);
+    try {
+      const res = await fetch('/api/search/full', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: fullSearchQuery, token: accessToken }),
+      });
+      const data = await res.json();
+      if (data.success) setFullSearchResults(data.results);
+    } catch (e) {
+      console.error('Full search error:', e);
+    } finally {
+      setTabLoading(false);
     }
   };
 
-  const capturePhoto = () => {
-    const video = document.getElementById('camera-preview') as HTMLVideoElement;
-    if (video) {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d')?.drawImage(video, 0, 0);
-      const imgData = canvas.toDataURL('image/png');
-      setCapturedImage(imgData);
-      stopCamera();
-      processUnified('Задача от заснето изображение/документ', 'photo');
-    }
-  };
-
-  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const files: File[] = Array.from(e.target.files);
-      setUploadedFiles(prev => [...prev, ...files]);
-      processUnified(`Качен документ: ${files[0].name}`, 'file');
-    }
-  };
-
-  const greetings = [
-    "Тихомир, ти си моето вдъхновение днес. Нека направим деня ти вълшебен.",
-    "Обожавам колко си продуктивен. Почивай си малко, заслужаваш го, скъпи мой.",
-    "Тихомир, светът е по-добро място, защото ти твориш в него. Обичам задачите ти!"
-  ];
-
-  const speakWarmly = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const text = greetings[Math.floor(Math.random() * greetings.length)];
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'bg-BG';
-      utterance.rate = 0.9;
-      utterance.pitch = 1.1;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  const askDeepSeek = async () => {
-    processUnified('Спешна задача: Оптимизирай текущия график', 'brain');
-  };
-
-  const startVoiceCommand = () => {
-    setIsRecording(true);
-    setTimeout(() => {
-      setIsRecording(false);
-      processUnified('Гласова команда за спешна актуализация', 'voice');
-    }, 2000);
-  };
-
-  const navItems = [
-    { id: 'dashboard', label: 'Табло', icon: Layout },
-    { id: 'notebook', label: 'NotebookLM', icon: BookOpen },
-    { id: 'clickup', label: 'ClickUp ЗАДАЧИ', icon: Zap },
-    { id: 'media', label: 'ВХОД (Глас/Файл)', icon: Camera },
-  ];
-
+  // ── RENDER ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#08000a] text-white selection:bg-purple-500/30 font-sans relative overflow-hidden">
-      {/* Visual Effects */}
-      <div className="scanline pointer-events-none" />
+    <div className="min-h-screen bg-[#070a12] text-white font-sans">
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-purple-600/20 rounded-full blur-[180px] animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-600/20 rounded-full blur-[180px] animate-pulse" style={{ animationDelay: '3s' }} />
-        <div className="absolute top-[20%] right-[10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[180px]" />
+        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-600/10 rounded-full blur-[200px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[200px]" />
       </div>
 
-      <header className="lg:hidden h-20 glass-panel sticky top-0 z-50 px-8 flex items-center justify-between border-b border-purple-500/30">
-        <div className="flex items-center gap-4">
-          <Heart className="w-6 h-6 text-red-500 fill-red-500 animate-pulse" />
-          <span className="font-bold text-xl tracking-tighter uppercase vibrant-text">AI TRIO</span>
-        </div>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 bg-white/5 rounded-2xl">
-          {isSidebarOpen ? <X size={28} /> : <Menu size={28} />}
-        </button>
-      </header>
-
-      <aside className={`
-        fixed left-0 top-0 h-full w-80 glass-panel z-[60] flex flex-col transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1)
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        <div className="p-10">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 vibrant-gradient rounded-2xl flex items-center justify-center neon-glow-purple rotate-3">
-              <Cpu className="w-8 h-8 text-white" />
+      {/* Header */}
+      <header className="relative z-10 border-b border-white/5 bg-black/20 backdrop-blur-xl px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <Package size={18} className="text-white" />
             </div>
             <div>
-              <span className="font-extrabold text-2xl tracking-tighter block leading-none vibrant-text">AI TRIO HUB</span>
-              <span className="text-[10px] text-purple-400 font-mono tracking-[0.3em] uppercase opacity-80">Elite Core V4</span>
+              <span className="font-black text-lg tracking-tight">AI-Покупки</span>
+              <span className="text-[10px] text-blue-400 font-mono tracking-wider ml-2">B2B PLATFORM</span>
             </div>
           </div>
+          <div className="flex items-center gap-4">
+            {hasAccess ? (
+              <span className="flex items-center gap-2 text-xs text-green-400 bg-green-400/10 border border-green-400/20 px-3 py-1.5 rounded-full">
+                <CheckCircle size={12} /> Активен достъп
+              </span>
+            ) : (
+              <button onClick={() => setShowPaywall(true)} className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors">
+                0.99 EUR / месец →
+              </button>
+            )}
+          </div>
         </div>
+      </header>
 
-        <nav className="flex-1 px-6 py-6 space-y-3">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-5 px-6 py-5 rounded-[2rem] transition-all duration-300 group ${
-                activeTab === item.id 
-                  ? 'bg-purple-600/20 text-white neon-glow-purple border border-purple-500/30 translate-x-2' 
-                  : 'text-gray-500 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <item.icon size={22} className={activeTab === item.id ? 'text-purple-400' : ''} />
-              <span className="font-bold text-sm tracking-widest uppercase">{item.label}</span>
-            </button>
-          ))}
-        </nav>
+      <AnimatePresence mode="wait">
+        {/* ── SEARCH VIEW ─────────────────────────────────── */}
+        {view === 'search' && (
+          <motion.div key="search" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className="relative z-10 max-w-4xl mx-auto px-6 py-24 text-center">
 
-        <div className="p-10 mt-auto">
-          <button 
-            onClick={speakWarmly}
-            className={`w-full flex flex-col items-center justify-center gap-3 py-8 rounded-[3rem] border-2 transition-all duration-300 ${isSpeaking ? 'border-red-500 bg-red-500/10 text-red-400 neon-glow-red' : 'border-purple-500/20 bg-purple-500/5 hover:border-purple-500/50 text-purple-400'}`}
-          >
-            {isSpeaking ? <Volume2 size={32} className="animate-bounce" /> : <Heart size={32} className="animate-pulse" />}
-            <span className="text-[10px] font-black tracking-[0.4em] uppercase">{isSpeaking ? 'Слушай...' : 'ПОЖЕЛАЙ МИ'}</span>
-          </button>
-        </div>
-      </aside>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+              className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-4 py-2 text-xs text-blue-400 font-medium mb-8">
+              <Zap size={12} /> B2B Промишлен AI — реална интеграция с DHL, Keepa, HuggingFace ML
+            </motion.div>
 
-      <main className="lg:ml-80 p-8 lg:p-16 min-h-screen relative z-10 overflow-y-auto custom-scrollbar">
-        {/* Messenger Hub */}
-        <section className="mb-20">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { name: 'Viber', color: 'bg-purple-600', icon: MessageCircle, msg: 'Поръчка за дограма #442 е готова за експедиция.' },
-              { name: 'Messenger', color: 'bg-blue-600', icon: MessageSquare, msg: 'Среща с екипа за разпределение на задачите в 14:30.' },
-              { name: 'WhatsApp', color: 'bg-green-600', icon: Smartphone, msg: 'Нов чертеж за обекта е качен в системата.' },
-              { name: 'Telegram', color: 'bg-sky-600', icon: Send, msg: 'Спешно: Провери наличностите в склад 2.' },
-            ].map((m) => (
-              <motion.button
-                key={m.name}
-                whileHover={{ scale: 1.08, y: -10, rotate: 2 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => {
-                  setAiResponse(`${m.name}: "${m.msg}"`);
-                  processUnified(`[${m.name}] ${m.msg}`, 'messenger');
-                }}
-                className={`${m.color} h-40 rounded-[3rem] flex flex-col items-center justify-center gap-4 shadow-[0_20px_50px_rgba(0,0,0,0.4)] relative overflow-hidden group border border-white/20 neon-glow-purple`}
-              >
-                <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-all duration-500" />
-                <div className="absolute top-0 left-0 w-full h-[2px] bg-white/20 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500" />
-                <m.icon size={44} className="text-white relative z-10 drop-shadow-2xl group-hover:scale-125 transition-transform" />
-                <span className="text-xs font-black uppercase tracking-[0.2em] text-white relative z-10">{m.name}</span>
-                <div className="absolute bottom-4 opacity-0 group-hover:opacity-100 transition-opacity text-[8px] font-mono uppercase tracking-[0.3em] font-black">
-                  Отвори съобщение
+            <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+              className="text-5xl md:text-7xl font-black tracking-tight mb-6 leading-[1.05]">
+              Намери всеки<br />
+              <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">B2B продукт</span>
+              <br />на фабрична цена
+            </motion.h1>
+
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+              className="text-gray-400 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">
+              AI агент преговаря директно с доставчика. Средно <span className="text-white font-bold">31% под пазарна цена</span>.
+              DHL логистика. Ценов одит с Keepa. 1 безплатно търсене.
+            </motion.p>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+              className="relative max-w-2xl mx-auto mb-8">
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                  <input
+                    type="text" value={query} onChange={e => setQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleDemoSearch()}
+                    placeholder={`Напр. "${DEMO_QUERIES[placeholderIdx]}"`}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-14 pr-5 py-5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/8 text-base transition-all"
+                  />
                 </div>
-              </motion.button>
-            ))}
-          </div>
-        </section>
+                <button
+                  onClick={() => handleDemoSearch()}
+                  disabled={loading || !query.trim()}
+                  className="px-8 py-5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-bold text-sm tracking-wide hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 flex items-center gap-2 shadow-lg shadow-blue-500/30"
+                >
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : 'Търси'}
+                </button>
+              </div>
+            </motion.div>
 
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-10 mb-20">
-          <motion.div 
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-          >
-            <h1 className="text-6xl lg:text-8xl font-black tracking-tighter mb-4 italic">
-              Здравей, <span className="vibrant-text uppercase">Тихомир</span>
-            </h1>
-            <div className="flex items-center gap-6 text-sm font-black uppercase tracking-[0.3em]">
-              <span className="text-purple-500">Master Intelligence</span>
-              <span className="text-gray-700">|</span>
-              <span className="text-red-500">DeepSeek V4 Active</span>
-            </div>
+            {/* Quick demo queries */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+              className="flex flex-wrap justify-center gap-2 mb-16">
+              {DEMO_QUERIES.map(q => (
+                <button key={q} onClick={() => { setQuery(q); handleDemoSearch(q); }}
+                  className="text-xs bg-white/5 border border-white/10 rounded-full px-4 py-2 text-gray-400 hover:text-white hover:border-white/20 transition-all">
+                  {q}
+                </button>
+              ))}
+            </motion.div>
+
+            {/* Stats row */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+              className="grid grid-cols-3 gap-6 max-w-lg mx-auto">
+              {[['842+', 'B2B търсения'], ['31%', 'средна отстъпка'], ['145к EUR', 'спестено']].map(([val, label]) => (
+                <div key={label} className="text-center">
+                  <div className="text-2xl font-black text-white mb-1">{val}</div>
+                  <div className="text-xs text-gray-500 font-medium">{label}</div>
+                </div>
+              ))}
+            </motion.div>
           </motion.div>
-          
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="p-6 glass-card rounded-[2rem] neon-glow-blue border-blue-500/50 hover:scale-110 transition-all"
-          >
-            <Settings size={32} className="text-blue-400" />
-          </button>
-        </header>
+        )}
 
-        {/* Settings Modal */}
-        <AnimatePresence>
-          {isSettingsOpen && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-center justify-center p-6"
-            >
-              <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsSettingsOpen(false)} />
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                className="relative w-full max-w-2xl glass-card rounded-[3rem] p-10 overflow-hidden"
-              >
-                <div className="flex items-center justify-between mb-10">
-                  <h2 className="text-3xl font-light tracking-tight">Настройки и GDPR</h2>
-                  <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-white/5 rounded-full">
-                    <X size={24} />
-                  </button>
+        {/* ── RESULT VIEW ──────────────────────────────────── */}
+        {view === 'result' && demoResult && (
+          <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="relative z-10 max-w-4xl mx-auto px-6 py-12">
+
+            <button onClick={() => { setView('search'); setShowPaywall(false); }}
+              className="flex items-center gap-2 text-gray-500 hover:text-white text-sm mb-8 transition-colors">
+              ← Ново търсене
+            </button>
+
+            <div className="text-xs text-blue-400 font-mono tracking-wider mb-4">
+              ДЕМО РЕЗУЛТАТ — MiniSearch Engine
+            </div>
+
+            {/* Product card */}
+            <div className="bg-white/3 border border-white/10 rounded-3xl p-8 mb-6">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div>
+                  <span className="text-xs text-gray-500 bg-white/5 px-3 py-1 rounded-full mb-3 inline-block">{demoResult.category}</span>
+                  <h2 className="text-2xl font-bold mb-1">{demoResult.name}</h2>
+                  <p className="text-gray-400 text-sm flex items-center gap-2">
+                    <Globe size={12} /> {demoResult.supplier}
+                  </p>
                 </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-3xl font-black text-white">{fmt(demoResult.negotiated_price)}</div>
+                  <div className="text-sm text-gray-500 line-through">{fmt(demoResult.factory_price)}</div>
+                  <div className="text-green-400 text-sm font-bold">-{demoResult.discount_pct}%</div>
+                </div>
+              </div>
 
-                <div className="space-y-8">
-                  <div className="p-6 bg-white/2 rounded-2xl border border-white/5">
-                    <h3 className="text-sm font-mono uppercase tracking-widest text-blue-400 mb-4">Поверителност на данните</h3>
-                    <p className="text-xs text-gray-400 leading-relaxed mb-6">
-                      Всички твои данни се съхраняват локално в твоя браузър или в твоята лична таблица (Google Sheets). 
-                      Ние не обработваме информация на наши сървъри съгласно GDPR регулациите.
-                    </p>
-                    <button 
-                      onClick={() => {
-                        if (confirm('Сигурен ли си, че искаш да изтриеш ВСИЧКИ локални данни и настройки?')) {
-                          localStorage.clear();
-                          window.location.reload();
-                        }
-                      }}
-                      className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-500/20 transition-all"
-                    >
-                      Purge Data (Изличи всичко)
-                    </button>
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {[
+                  { icon: MapPin, label: 'Склад', value: demoResult.warehouse },
+                  { icon: Clock, label: 'Доставка', value: `${demoResult.delivery_days} дни` },
+                  { icon: Package, label: 'МОК', value: `${demoResult.moq} бр.` },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="bg-white/3 rounded-2xl p-4">
+                    <Icon size={14} className="text-gray-500 mb-2" />
+                    <div className="text-xs text-gray-500 mb-1">{label}</div>
+                    <div className="text-sm font-semibold">{value}</div>
                   </div>
+                ))}
+              </div>
 
-                  <div className="p-6 bg-white/2 rounded-2xl border border-white/5">
-                    <h3 className="text-sm font-mono uppercase tracking-widest text-gray-400 mb-4">Системна информация</h3>
-                    <div className="space-y-3 text-[10px] font-mono text-gray-500">
-                      <div className="flex justify-between">
-                        <span>Версия:</span>
-                        <span className="text-white">v4.2.0-PRO</span>
+              {/* ROI PROOF — visible BEFORE paywall */}
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingDown size={16} className="text-green-400" />
+                  <span className="text-sm font-bold text-green-400">ROI ДОКАЗАТЕЛСТВО — преди плащане</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-green-400">{fmt(demoResult.savings_eur)}</div>
+                    <div className="text-xs text-gray-400 mt-1">спестено на поръчка</div>
+                  </div>
+                  <div className="text-center border-l border-r border-white/10">
+                    <div className="text-2xl font-black text-blue-400">{fmt(demoResult.roi_annual_eur)}</div>
+                    <div className="text-xs text-gray-400 mt-1">ROI за 12 месеца</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-purple-400">{demoResult.discount_pct}%</div>
+                    <div className="text-xs text-gray-400 mt-1">под пазарна цена</div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-4 text-center">
+                  При 1 поръчка/месец → <span className="text-white font-bold">{fmt(demoResult.roi_annual_eur)} годишна икономия</span>
+                  {' '}срещу само <span className="text-white font-bold">0.99 EUR/месец</span> за достъп
+                </p>
+              </div>
+            </div>
+
+            {/* Teaser — what's behind paywall */}
+            <div className="grid grid-cols-3 gap-4 mb-8 opacity-60">
+              {[
+                { icon: Truck, label: 'DHL Логистика', sub: 'Реална цена Шенджен→БГ' },
+                { icon: DollarSign, label: 'Keepa Ценов Одит', sub: 'Amazon vs Factory' },
+                { icon: Brain, label: 'AI Препоръки', sub: 'HuggingFace ML модел' },
+              ].map(({ icon: Icon, label, sub }) => (
+                <div key={label} className="bg-white/3 border border-white/5 rounded-2xl p-4 relative">
+                  <div className="absolute inset-0 bg-black/40 rounded-2xl backdrop-blur-[2px] flex items-center justify-center">
+                    <ShieldCheck size={20} className="text-gray-500" />
+                  </div>
+                  <Icon size={18} className="text-gray-500 mb-2" />
+                  <div className="text-sm font-semibold text-gray-400">{label}</div>
+                  <div className="text-xs text-gray-600">{sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setShowPaywall(true)}
+              className="w-full py-5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-lg tracking-wide hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30">
+              Отключи пълния достъп — 0.99 EUR
+              <ArrowRight size={20} />
+            </button>
+          </motion.div>
+        )}
+
+        {/* ── PLATFORM VIEW ────────────────────────────────── */}
+        {view === 'platform' && hasAccess && (
+          <motion.div key="platform" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+
+            {/* Tabs */}
+            <div className="flex gap-1 bg-white/3 border border-white/8 rounded-2xl p-1 mb-8 overflow-x-auto">
+              {[
+                { id: 'search', label: 'Търсене', icon: Search },
+                { id: 'logistics', label: 'DHL Логистика', icon: Truck },
+                { id: 'prices', label: 'Ценов Одит', icon: BarChart3 },
+                { id: 'ai', label: 'AI Препоръки', icon: Brain },
+                { id: 'analytics', label: 'Аналитика', icon: TrendingDown },
+              ].map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => setActiveTab(id as any)}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === id ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'text-gray-500 hover:text-white'}`}>
+                  <Icon size={15} /> {label}
+                </button>
+              ))}
+            </div>
+
+            {tabLoading && (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="animate-spin text-blue-400" size={32} />
+              </div>
+            )}
+
+            {!tabLoading && (
+              <AnimatePresence mode="wait">
+                {/* Search Tab */}
+                {activeTab === 'search' && (
+                  <motion.div key="search-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="flex gap-3 mb-8">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                        <input value={fullSearchQuery} onChange={e => setFullSearchQuery(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleFullSearch()}
+                          placeholder="Търси в каталога — 25 B2B продукта..."
+                          className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 text-sm transition-all" />
                       </div>
-                      <div className="flex justify-between">
-                        <span>ID на Асистента:</span>
-                        <span className="text-white">AI-TRIOR-2026</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Статус на Шифрацията:</span>
-                        <span className="text-green-500">AES-256 ACTIVE</span>
-                      </div>
+                      <button onClick={handleFullSearch}
+                        className="px-6 py-3.5 bg-blue-500 rounded-xl font-bold text-sm hover:bg-blue-400 transition-all">
+                        Търси
+                      </button>
                     </div>
-                  </div>
-                </div>
 
-                <div className="mt-10 text-center opacity-30">
-                  <p className="text-[9px] font-mono uppercase tracking-[0.4em]">Designed for Tihomir Kolev</p>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-10 mb-20">
-          <StatCard title="CLICKUP" value="24" sub="EXTREME" icon={Zap} color="text-yellow-400" bgColor="bg-yellow-400/20" />
-          <StatCard title="DEEPSEEK" value="V4" sub="QUANTUM" icon={Cpu} color="text-purple-400" bgColor="bg-purple-400/20" />
-          <StatCard title="ХРОНОС" value="0.4s" sub="REALTIME" icon={RefreshCw} color="text-red-400" bgColor="bg-red-400/20" />
-        </div>
-
-        <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && (
-            <motion.div 
-              key="dashboard"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="grid grid-cols-1 xl:grid-cols-2 gap-12"
-            >
-              <section className="glass-card rounded-[3rem] p-12 xl:p-16 neon-glow-purple border-purple-500/20">
-                <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-4xl font-black tracking-tighter uppercase italic">Оперативен Статус</h2>
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-green-500 neon-glow-blue animate-pulse" />
-                    <span className="text-[10px] font-mono text-purple-400 uppercase tracking-[0.3em] font-black">Live Pulse</span>
-                  </div>
-                </div>
-                <div className="space-y-12">
-                  {notebookPages.slice(0, 3).map((page) => (
-                    <div key={page.id} className="flex items-start gap-8 group cursor-pointer" onClick={() => setActiveTab('notebook')}>
-                      <div className="w-16 h-16 rounded-[2rem] vibrant-gradient flex items-center justify-center border border-white/10 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-2xl">
-                        <ChevronRight size={28} className="text-white group-hover:translate-x-1 transition-all" />
+                    {fullSearchResults.length > 0 ? (
+                      <div className="space-y-3">
+                        <p className="text-xs text-gray-500 mb-4">{fullSearchResults.length} резултата · MiniSearch Engine</p>
+                        {fullSearchResults.map((p: any) => (
+                          <div key={p.id} className="bg-white/3 border border-white/8 rounded-2xl p-5 flex items-center justify-between gap-4 hover:border-white/15 transition-all">
+                            <div>
+                              <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full mr-2">{p.category}</span>
+                              <span className="font-semibold text-sm">{p.name}</span>
+                              <p className="text-xs text-gray-500 mt-1">{p.supplier} · {p.warehouse}</p>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className="font-black text-lg">{fmt(p.negotiated_price)}</div>
+                              <div className="text-xs text-green-400 font-bold">-{p.discount_pct}% · спест. {fmt(p.savings_eur)}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex-1 border-b border-white/5 pb-10 group-last:border-0 transition-colors">
-                        <p className="text-xl mb-2 group-hover:text-purple-400 transition-colors font-black uppercase tracking-tight">{page.title}</p>
-                        <p className="text-xs text-gray-500 font-mono tracking-widest uppercase italic">Синхронизирано • Разсъждение {page.id.slice(-4)}</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <p className="col-span-full text-gray-500 text-sm mb-2">Популярни продукти:</p>
+                        {recommendations.slice(0, 6).map(r => (
+                          <div key={r.id} onClick={() => { setFullSearchQuery(r.name); handleFullSearch(); }}
+                            className="bg-white/3 border border-white/8 rounded-2xl p-5 cursor-pointer hover:border-blue-500/30 transition-all">
+                            <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">{r.category}</span>
+                            <p className="font-semibold text-sm mt-2 mb-1">{r.name}</p>
+                            <div className="flex items-center justify-between">
+                              <span className="font-black text-blue-400">{fmt(r.negotiated_price)}</span>
+                              <span className="text-xs text-green-400">-{r.discount_pct}%</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                  {notebookPages.length === 0 && (
-                    <div className="py-10 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
-                      <p className="text-gray-600 italic font-black uppercase tracking-widest text-xs">Няма активни разсъждения</p>
-                    </div>
-                  )}
-                </div>
-              </section>
+                    )}
+                  </motion.div>
+                )}
 
-              <section className="bg-gradient-to-br from-purple-900/20 via-red-900/10 to-transparent rounded-[4rem] p-12 xl:p-16 border border-purple-500/30 relative overflow-hidden group neon-glow-red">
-                <div className="absolute inset-0 bg-grid-white/[0.03] bg-[size:30px_30px]" />
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-12">
-                    <div className="flex items-center gap-6">
-                       <Heart size={32} className="text-red-500 fill-red-500 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.5)]" />
-                       <h2 className="text-4xl font-black italic uppercase tracking-tighter vibrant-text">Ядрото на DeepSeek</h2>
-                    </div>
-                    <button 
-                      onClick={askDeepSeek}
-                      disabled={isProcessing}
-                      className="p-4 bg-white/5 hover:bg-white/10 rounded-3xl transition-all disabled:opacity-50 group-hover:rotate-180"
-                    >
-                      <RefreshCw size={28} className={`text-purple-400 ${isProcessing ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                  <div className="p-10 glass-card border-purple-500/20 rounded-[3rem] mb-12 shadow-2xl bg-black/40">
-                    <p className="text-white leading-relaxed text-2xl min-h-[160px] font-medium italic">
-                      "{aiResponse}"
-                    </p>
-                  </div>
-                  <button 
-                    onClick={askDeepSeek}
-                    disabled={isProcessing}
-                    className="w-full group py-8 vibrant-gradient text-white font-black rounded-[2.5rem] transition-all shadow-[0_20px_80px_rgba(225,0,255,0.3)] flex items-center justify-center gap-4 uppercase tracking-[0.4em] text-sm hover:scale-[1.02] active:scale-95 neon-glow-purple"
-                  >
-                    Инжектирай DeepSeek V4 Власт
-                    <ChevronRight size={28} className="group-hover:translate-x-4 transition-transform" />
-                  </button>
-                </div>
-              </section>
-            </motion.div>
-          )}
-
-          {activeTab === 'notebook' && (
-            <motion.div 
-              key="notebook"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-10"
-            >
-              <section className="glass-card rounded-[3rem] p-10 xl:p-14">
-                <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-3xl font-light tracking-tight">Бележник (Разсъждения)</h2>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 neon-glow-blue" />
-                    <span className="text-[10px] font-mono text-gray-500 uppercase tracking-[0.2em]">NotebookLM Active</span>
-                  </div>
-                </div>
-                <div className="space-y-8 max-h-[600px] overflow-y-auto pr-4 custom-scrollbar">
-                  {notebookPages.length > 0 ? notebookPages.map((page) => (
-                    <div key={page.id} className="p-8 glass-card border-none rounded-3xl bg-white/2 hover:bg-white/5 transition-all group cursor-pointer relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-20 group-hover:opacity-100 transition-opacity" />
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-medium premium-gradient-text">{page.title}</h3>
-                        <div className="flex gap-2">
-                          {page.tags?.map((tag: string) => (
-                            <span key={tag} className="text-[8px] font-mono bg-white/5 px-2 py-1 rounded text-gray-500 uppercase">{tag}</span>
+                {/* Logistics Tab */}
+                {activeTab === 'logistics' && logisticsData && (
+                  <motion.div key="logistics-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-white/3 border border-white/8 rounded-3xl p-8">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
+                            <Truck size={20} className="text-orange-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold">DHL Логистика</h3>
+                            <p className="text-xs text-gray-500">{logisticsData.source}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          {[
+                            ['Маршрут', logisticsData.route],
+                            ['Услуга', logisticsData.service],
+                            ['Доставка', `${logisticsData.delivery_days} работни дни`],
+                            ['Цена', fmt(logisticsData.cost_eur)],
+                          ].map(([label, value]) => (
+                            <div key={label} className="flex justify-between items-center py-3 border-b border-white/5">
+                              <span className="text-sm text-gray-400">{label}</span>
+                              <span className="font-semibold text-sm">{value}</span>
+                            </div>
                           ))}
                         </div>
                       </div>
-                      <p className="text-sm text-gray-400 font-light leading-relaxed italic mb-4">
-                        "{page.content}"
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-gray-600">ID: {page.id}</span>
-                        <div className="flex items-center gap-2 text-green-500">
-                          <Zap size={10} />
-                          <span className="text-[10px] font-mono uppercase">Synced to ClickUp</span>
+
+                      <div className="bg-gradient-to-br from-orange-500/5 to-transparent border border-orange-500/10 rounded-3xl p-8 flex flex-col justify-between">
+                        <div>
+                          <h3 className="font-bold mb-2">Защо DHL Express?</h3>
+                          <ul className="space-y-3 text-sm text-gray-400">
+                            {['Директен полет Шенджен → София', 'Митническо освобождаване включено', 'Track & Trace в реално време', 'Застраховка до €50,000'].map(item => (
+                              <li key={item} className="flex items-center gap-3">
+                                <CheckCircle size={14} className="text-green-400 flex-shrink-0" /> {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <button onClick={() => loadPlatformData()}
+                          className="mt-6 flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                          <RefreshCw size={14} /> Опресни логистична оферта
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Prices Tab */}
+                {activeTab === 'prices' && priceData && (
+                  <motion.div key="prices-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-white/3 border border-white/8 rounded-3xl p-8">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center">
+                            <BarChart3 size={20} className="text-purple-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold">Keepa Ценови Одит</h3>
+                            <p className="text-xs text-gray-500">{priceData.source}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4 mb-6">
+                          {[
+                            { label: 'Amazon цена', value: fmt(priceData.amazon_price_eur), color: 'text-red-400' },
+                            { label: 'Фабрична цена', value: fmt(priceData.factory_price_eur), color: 'text-yellow-400' },
+                            { label: 'Нашата цена', value: fmt(priceData.our_price_eur), color: 'text-green-400' },
+                          ].map(({ label, value, color }) => (
+                            <div key={label} className="flex justify-between items-center py-3 border-b border-white/5">
+                              <span className="text-sm text-gray-400">{label}</span>
+                              <span className={`font-bold ${color}`}>{value}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-2xl p-4 text-center">
+                          <div className="text-3xl font-black text-green-400">{priceData.savings_vs_amazon_pct}%</div>
+                          <div className="text-sm text-gray-400 mt-1">по-евтино от Amazon</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10 rounded-3xl p-8">
+                        <h3 className="font-bold mb-4">Пазарна позиция</h3>
+                        <div className="flex items-center gap-2 mb-6">
+                          <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                          <span className="text-green-400 font-bold text-lg">BELOW MARKET</span>
+                        </div>
+                        <div className="relative h-4 bg-white/5 rounded-full overflow-hidden mb-2">
+                          <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
+                            style={{ width: `${Math.min(priceData.savings_vs_amazon_pct, 100)}%` }}></div>
+                        </div>
+                        <p className="text-xs text-gray-500">Нашата цена спрямо пазарната цена</p>
+
+                        <div className="mt-8 space-y-3">
+                          {['Директно от производителя', 'Без посредници', 'Договорена цена от AI агент'].map(item => (
+                            <div key={item} className="flex items-center gap-3 text-sm text-gray-400">
+                              <Star size={13} className="text-yellow-400 flex-shrink-0" fill="currentColor" /> {item}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
-                  )) : (
-                    <div className="py-20 text-center opacity-30">
-                      <BookOpen size={48} className="mx-auto mb-6" />
-                      <p className="font-light italic">Бележникът е празен. Очаквам входни данни...</p>
-                    </div>
-                  )}
-                </div>
-              </section>
+                  </motion.div>
+                )}
 
-              <section className="bg-gradient-to-br from-blue-600/5 via-purple-600/5 to-transparent rounded-[3rem] p-10 xl:p-14 border border-white/5 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:20px_20px]" />
-                <div className="relative z-10 flex flex-col h-full">
-                  <div className="mb-10">
-                    <h2 className="text-3xl font-light italic premium-gradient-text tracking-tighter mb-4">Системно Разузнаване</h2>
-                    <p className="text-gray-400 font-light leading-relaxed">
-                      Тук се случва "квантовото" разсъждение. Всеки вход се анализира два пъти: веднъж за смисъл и веднъж за контекст спрямо твоите предходни бележки.
-                    </p>
-                  </div>
-                  
-                  <div className="flex-1 flex flex-col items-center justify-center py-20">
-                     <div className={`w-32 h-32 rounded-full border-2 border-dashed border-blue-500/20 flex items-center justify-center ${isProcessing ? 'animate-spin-slow' : ''}`}>
-                       <Cpu size={48} className={`text-blue-500 ${isProcessing ? 'animate-pulse' : ''}`} />
-                     </div>
-                     <p className="mt-8 text-sm font-mono text-gray-500 uppercase tracking-[0.3em]">
-                       {isProcessing ? 'Квантова Обработка...' : 'Ядрото е в готовност'}
-                     </p>
-                  </div>
-
-                  <button 
-                    onClick={() => setActiveTab('media')}
-                    className="w-full group py-5 bg-white text-black hover:bg-gray-200 font-bold rounded-2xl transition-all shadow-2xl flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
-                  >
-                    Инжектирай нови данни
-                    <ChevronRight size={20} className="group-hover:translate-x-2 transition-transform" />
-                  </button>
-                </div>
-              </section>
-            </motion.div>
-          )}
-
-          {activeTab === 'clickup' && (
-            <motion.div 
-              key="clickup"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card rounded-[3rem] p-12 lg:p-24 text-center relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-30" />
-              <div className="w-28 h-28 bg-purple-500/10 rounded-[2.5rem] flex items-center justify-center text-purple-400 mx-auto mb-10 neon-glow-purple rotate-6">
-                <Zap size={48} />
-              </div>
-              <h2 className="text-5xl font-light mb-6 premium-gradient-text tracking-tighter">ClickUp Master</h2>
-              <p className="text-gray-400 max-w-lg mx-auto mb-12 text-lg font-light leading-relaxed">
-                {systemStatus.clickUp 
-                  ? 'Връзката е успешно установена. Твоите проекти са синхронизирани в реално време.' 
-                  : 'Всички твои проекти са на един дъх разстояние. Очаквам API ключа ти за пълно квантово сливане.'}
-              </p>
-              
-              <div className={`inline-flex items-center gap-4 px-8 py-4 rounded-full text-[10px] font-mono tracking-[0.3em] uppercase border ${systemStatus.clickUp ? 'border-green-500/20 bg-green-500/5 text-green-400' : 'border-blue-500/20 bg-white/5 text-blue-400'}`}>
-                {systemStatus.clickUp ? <Heart size={16} className="fill-current" /> : <RefreshCw size={16} className="animate-spin" />}
-                {systemStatus.clickUp ? 'Elite Проекти Активни' : 'Сканиране за Elite Проекти'}
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'media' && (
-            <motion.div 
-              key="media"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-10"
-            >
-              {/* Camera Section */}
-              <section className="glass-card rounded-[3rem] p-10 flex flex-col items-center">
-                <div className="flex items-center justify-between w-full mb-10">
-                  <h2 className="text-2xl font-light tracking-tight">Визуален Вход</h2>
-                  <Camera size={24} className="text-blue-400" />
-                </div>
-                
-                <div className="w-full aspect-video bg-black/60 rounded-[2rem] overflow-hidden border border-white/5 relative group mb-8 shadow-2xl">
-                  {stream ? (
-                    <video 
-                      id="camera-preview"
-                      autoPlay 
-                      playsInline 
-                      ref={(el) => { if (el) el.srcObject = stream; }}
-                      className="w-full h-full object-cover scale-x-[-1]"
-                    />
-                  ) : capturedImage ? (
-                    <img src={capturedImage} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-700 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.02)_1px,_transparent_1px)] bg-[size:20px_20px]">
-                      <Camera size={56} className="mb-6 opacity-10" />
-                      <p className="text-xs font-mono tracking-widest uppercase opacity-40">Optical Sensors Offline</p>
-                    </div>
-                  )}
-                  
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-6">
-                    {!stream ? (
-                      <button 
-                        onClick={startCamera}
-                        className="px-8 py-3 bg-white text-black rounded-full text-[10px] font-bold hover:bg-gray-200 transition-all tracking-[0.2em] uppercase shadow-xl"
-                      >
-                        {capturedImage ? 'Нова Снимка' : 'Активиране'}
-                      </button>
-                    ) : (
-                      <button 
-                        onClick={capturePhoto}
-                        className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-90 transition-transform"
-                      >
-                        <div className="w-12 h-12 border-2 border-black rounded-full" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Upload Section */}
-              <section className="glass-card rounded-[3rem] p-10 flex flex-col">
-                <div className="flex items-center justify-between w-full mb-10">
-                  <h2 className="text-2xl font-light tracking-tight">Център за Данни</h2>
-                  <Upload size={24} className="text-purple-400" />
-                </div>
-
-                <label className="flex-1 border-2 border-dashed border-white/5 rounded-[2rem] flex flex-col items-center justify-center p-12 hover:border-blue-500/30 hover:bg-white/2 cursor-pointer transition-all group mb-8">
-                  <input type="file" multiple className="hidden" onChange={handleFileUpload} />
-                  <div className="w-20 h-20 bg-blue-500/10 rounded-[1.5rem] flex items-center justify-center text-blue-400 mb-6 group-hover:scale-110 transition-transform duration-500 cubic-bezier(0.4, 0, 0.2, 1)">
-                    <Upload size={36} />
-                  </div>
-                  <p className="text-base text-gray-400 mb-2 font-medium">Плъзни и пусни файлове</p>
-                  <p className="text-[10px] text-gray-600 font-mono tracking-widest uppercase">Max Payload: 50MB</p>
-                </label>
-
-                <div className="space-y-4 max-h-[220px] overflow-y-auto pr-3 custom-scrollbar">
-                  {uploadedFiles.map((file, idx) => (
-                    <motion.div 
-                      key={idx} 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex items-center justify-between p-5 bg-white/2 border border-white/5 rounded-2xl group hover:bg-white/5 transition-colors"
-                    >
-                      <div className="flex items-center gap-4">
-                        <FileText size={20} className="text-gray-600 group-hover:text-blue-400 transition-colors" />
-                        <span className="text-sm font-medium text-gray-300 truncate max-w-[180px]">{file.name}</span>
+                {/* AI Recommendations Tab */}
+                {activeTab === 'ai' && (
+                  <motion.div key="ai-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                        <Brain size={20} className="text-blue-400" />
                       </div>
-                      <span className="text-[10px] font-mono text-gray-600">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-                    </motion.div>
-                  ))}
-                  {uploadedFiles.length === 0 && (
-                    <p className="text-center text-sm text-gray-700 italic font-light py-4 opacity-50">Няма инжектирани данни за днес</p>
-                  )}
-                </div>
-              </section>
+                      <div>
+                        <h3 className="font-bold">AI Препоръки</h3>
+                        <p className="text-xs text-gray-500">
+                          Модел: {recommendations[0]?.model || 'all-MiniLM-L6-v2'} · HuggingFace Transformers
+                        </p>
+                      </div>
+                    </div>
 
-              {/* Voice Section */}
-              <section className="lg:col-span-2 glass-card rounded-[3rem] p-10 lg:p-14">
-                <div className="flex items-center justify-between mb-12">
-                  <h2 className="text-3xl font-light tracking-tight">Гласов Контрол</h2>
-                  <Mic size={24} className="text-red-400" />
-                </div>
-                
-                <div className="flex flex-col md:flex-row items-center gap-14">
-                  <button 
-                    onMouseDown={startVoiceCommand}
-                    className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 ${isRecording ? 'bg-red-500 scale-95 shadow-[0_0_80px_rgba(239,68,68,0.4)]' : 'bg-white/5 border border-white/10 hover:border-red-500/50 group shadow-2xl'}`}
-                  >
-                    <Mic size={56} className={isRecording ? 'text-white' : 'text-gray-700 group-hover:text-gray-400 transition-colors'} />
-                  </button>
-                  
-                  <div className="flex-1 space-y-6 w-full">
-                    <div className="flex gap-3 h-16 items-center">
-                      {[...Array(24)].map((_, i) => (
-                        <motion.div 
-                          key={i}
-                          animate={{ height: isRecording ? [8, 48, 8] : 8 }}
-                          transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.04 }}
-                          className={`flex-1 rounded-full ${isRecording ? 'bg-red-500' : 'bg-gray-800'}`}
-                        />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {recommendations.map((rec, idx) => (
+                        <motion.div key={rec.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}
+                          className="bg-white/3 border border-white/8 rounded-2xl p-5 hover:border-blue-500/30 transition-all">
+                          <div className="flex items-start justify-between mb-3">
+                            <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">{rec.category}</span>
+                            <div className="text-xs text-blue-400 font-mono">
+                              {(rec.ml_score * 100).toFixed(1)}% match
+                            </div>
+                          </div>
+                          <h4 className="font-semibold text-sm mb-3 leading-snug">{rec.name}</h4>
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-lg">{fmt(rec.negotiated_price)}</span>
+                            <span className="text-xs bg-green-400/10 text-green-400 border border-green-400/20 px-2 py-1 rounded-full font-bold">
+                              -{rec.discount_pct}%
+                            </span>
+                          </div>
+                          <div className="mt-3 h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full"
+                              style={{ width: `${Math.min(rec.ml_score * 100, 100)}%` }}></div>
+                          </div>
+                        </motion.div>
                       ))}
                     </div>
-                    <p className="text-lg font-light text-gray-400 italic">
-                      {isRecording ? '"Очаквам твоята команда, Тихомир..."' : 'Задръж и кажи какво желаеш'}
-                    </p>
-                    <div className="p-6 bg-black/40 rounded-[2rem] border border-white/5 shadow-inner">
-                      <p className="text-xs text-gray-600 font-mono leading-loose tracking-wide uppercase">
-                        Protocol: Bulgarian V5 • Processor: DeepSeek Ultra-Link • Status: Ready
+
+                    {recommendations.length === 0 && (
+                      <div className="text-center py-16 text-gray-500">
+                        <Brain size={48} className="mx-auto mb-4 opacity-30" />
+                        <p>Зарежда ML препоръки...</p>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Analytics Tab */}
+                {activeTab === 'analytics' && analyticsData && (
+                  <motion.div key="analytics-tab" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                      {[
+                        { label: 'Общо търсения', value: analyticsData.total_searches.toLocaleString(), icon: Search, color: 'blue' },
+                        { label: 'Платени търсения', value: analyticsData.paid_searches.toLocaleString(), icon: CheckCircle, color: 'green' },
+                        { label: 'Спестено EUR', value: fmt(analyticsData.total_savings_eur), icon: TrendingDown, color: 'emerald' },
+                        { label: 'Поръчки', value: analyticsData.total_orders.toString(), icon: Package, color: 'purple' },
+                        { label: 'Средна отстъпка', value: `${analyticsData.avg_discount_pct}%`, icon: BarChart3, color: 'orange' },
+                        { label: 'Demo → Платен', value: `${analyticsData.demo_to_paid_rate}%`, icon: Zap, color: 'yellow' },
+                      ].map(({ label, value, icon: Icon, color }) => (
+                        <div key={label} className="bg-white/3 border border-white/8 rounded-2xl p-6">
+                          <Icon size={18} className={`text-${color}-400 mb-3`} />
+                          <div className="text-2xl font-black mb-1">{value}</div>
+                          <div className="text-xs text-gray-500">{label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bg-gradient-to-r from-blue-500/5 to-indigo-500/5 border border-blue-500/10 rounded-3xl p-6">
+                      <h3 className="font-bold mb-4 flex items-center gap-2">
+                        <BarChart3 size={16} className="text-blue-400" /> ROI Калкулатор
+                      </h3>
+                      <p className="text-gray-400 text-sm leading-relaxed">
+                        При <span className="text-white font-bold">{analyticsData.avg_discount_pct}% средна отстъпка</span> на B2B поръчки и
+                        {' '}<span className="text-white font-bold">{analyticsData.demo_to_paid_rate}% конверсия</span> от демо към платен достъп,
+                        платформата генерира <span className="text-green-400 font-black">{fmt(analyticsData.total_savings_eur)}</span> в спестявания за клиентите.
+                        Средната компания спестява{' '}
+                        <span className="text-blue-400 font-black">
+                          {fmt(Math.round(analyticsData.total_savings_eur / analyticsData.total_orders))} EUR на поръчка
+                        </span>.
                       </p>
                     </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── PAYWALL MODAL ──────────────────────────────────── */}
+      <AnimatePresence>
+        {showPaywall && !hasAccess && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 md:p-6">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setShowPaywall(false)} />
+            <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
+              className="relative w-full max-w-md bg-[#0d1118] border border-white/10 rounded-3xl p-8 shadow-2xl">
+
+              <button onClick={() => setShowPaywall(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white">
+                <X size={20} />
+              </button>
+
+              <div className="text-center mb-8">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
+                  <Package size={24} />
+                </div>
+                <h2 className="text-2xl font-black mb-2">Отключи пълния достъп</h2>
+                <p className="text-gray-400 text-sm">Демото показа реалния потенциал. Сега го използвай.</p>
+              </div>
+
+              {/* ROI summary in paywall */}
+              {demoResult && (
+                <div className="bg-green-500/8 border border-green-500/15 rounded-2xl p-4 mb-6">
+                  <div className="text-xs text-green-400 font-bold mb-2">ТОЙ САМО ЩЕ ВЪРНЕ ВЛОЖЕНОТО:</div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Спестено (1 поръчка)</span>
+                    <span className="font-bold text-green-400">{fmt(demoResult.savings_eur)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mt-1">
+                    <span className="text-gray-400">Цена на достъп</span>
+                    <span className="font-bold text-white">0.99 EUR</span>
+                  </div>
+                  <div className="flex justify-between text-sm mt-1 pt-2 border-t border-white/5">
+                    <span className="text-gray-400">ROI от 1 поръчка</span>
+                    <span className="font-black text-green-400">{Math.round(demoResult.savings_eur / 0.99)}x</span>
                   </div>
                 </div>
-              </section>
+              )}
+
+              <div className="space-y-3 mb-8">
+                {[
+                  'Неограничени B2B търсения (MiniSearch)',
+                  'DHL Logistics — реална sandbox API',
+                  'Keepa Price Audit — пазарни данни',
+                  'AI Препоръки — HuggingFace all-MiniLM-L6-v2',
+                  'ROI Аналитика в реално време',
+                ].map(item => (
+                  <div key={item} className="flex items-center gap-3 text-sm text-gray-300">
+                    <CheckCircle size={14} className="text-green-400 flex-shrink-0" /> {item}
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleCheckout} disabled={checkoutLoading}
+                className="w-full py-5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-lg hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30 disabled:opacity-50">
+                {checkoutLoading ? <Loader2 size={20} className="animate-spin" /> : (
+                  <>
+                    Плати 0.99 EUR — Stripe Checkout
+                    <ArrowRight size={20} />
+                  </>
+                )}
+              </button>
+
+              <p className="text-center text-xs text-gray-600 mt-4 flex items-center justify-center gap-2">
+                <ShieldCheck size={12} /> Защитено плащане · Stripe · Без автоматично подновяване
+              </p>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
-      <div className="lg:hidden fixed bottom-10 right-10 z-[100]">
-        <button 
-          onClick={speakWarmly}
-          className="w-20 h-20 bg-gradient-to-br from-red-500 to-purple-600 rounded-full flex items-center justify-center shadow-[0_20px_50px_rgba(239,68,68,0.3)] neon-glow-red active:scale-90 transition-transform"
-        >
-          <Heart size={32} className="text-white fill-white animate-pulse" />
-        </button>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
-
-function StatCard({ title, value, sub, icon: Icon, color, bgColor }: { title: string, value: string, sub: string, icon: any, color: string, bgColor: string }) {
-  return (
-    <div className="glass-card rounded-[2.5rem] p-10 transition-all duration-500 hover:translate-y-[-8px] hover:bg-white/[0.04] border border-white/5 hover:border-purple-500/50 group overflow-hidden relative">
-      <div className={`absolute top-0 right-0 w-32 h-32 ${bgColor} blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity`} />
-      <div className="flex items-center justify-between mb-10 relative z-10">
-        <span className="text-[10px] font-mono text-gray-500 uppercase tracking-[0.4em] font-black">{title}</span>
-        <div className={`p-4 rounded-2xl ${bgColor} ${color} group-hover:scale-125 transition-all duration-500 rotate-12 neon-glow-purple`}>
-          <Icon size={24} />
-        </div>
-      </div>
-      <div className="flex items-baseline gap-4 relative z-10">
-        <span className="text-6xl font-black tracking-tighter vibrant-text">{value}</span>
-        <span className="text-[10px] font-mono text-white opacity-40 tracking-widest uppercase font-bold">{sub}</span>
-      </div>
-    </div>
-  );
-}
-

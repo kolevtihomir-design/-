@@ -4,13 +4,17 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 import MiniSearch from 'minisearch';
 import Stripe from 'stripe';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import nodemailer from 'nodemailer';
 import {
   db, getAllProducts, upsertProduct, deleteProduct, getProductById,
   saveSession, sessionExists, dbCacheGet, dbCacheSet, getAnalytics, bumpAnalytics,
+  createUser, getUserByEmail, getUserById, confirmUser,
+  activateTrialPlan, activatePaidPlan, useAction,
 } from './src/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -641,6 +645,186 @@ async function startServer() {
     const a = getAnalytics();
     const recent = db.prepare("SELECT * FROM order_log ORDER BY created_at DESC LIMIT 20").all();
     res.json({ success: true, analytics: a, recent_orders: recent });
+  });
+
+  // ── AUTH & PAYMENT ROUTES ─────────────────────────────
+  const bcryptHash = (pw: string) => crypto.createHash('sha256').update(pw + JWT_SECRET).digest('hex');
+
+  const mailer = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER || 'kolev.tihomir@gmail.com',
+      pass: process.env.GMAIL_APP_PASSWORD || '',
+    },
+  });
+
+  async function sendConfirmEmail(to: string, code: string) {
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    await mailer.sendMail({
+      from: `"AI-Покупки" <kolev.tihomir@gmail.com>`,
+      to,
+      subject: 'Потвърди имейла си — AI-Покупки',
+      html: `<div style="font-family:Arial;max-width:480px;margin:auto;padding:32px;background:#0d1118;color:#fff;border-radius:16px">
+        <h2 style="color:#3b82f6">AI-Покупки B2B</h2>
+        <p>Твоят код за потвърждение:</p>
+        <div style="font-size:36px;font-weight:900;letter-spacing:8px;color:#3b82f6;margin:24px 0">${code}</div>
+        <p style="color:#6b7280;font-size:13px">Важи 30 минути. Ако не си се регистрирал, игнорирай този имейл.</p>
+      </div>`,
+    });
+  }
+
+  // POST /api/auth/register
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { email, password } = req.body as { email: string; password: string };
+      if (!email || !password || password.length < 6)
+        return res.status(400).json({ error: 'Невалиден имейл или парола (мин. 6 символа)' });
+      const existing = getUserByEmail(email);
+      if (existing) return res.status(409).json({ error: 'Този имейл вече е регистриран' });
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      createUser(email, bcryptHash(password), code);
+      try { await sendConfirmEmail(email, code); } catch (e) { console.error('Email error:', e); }
+      res.json({ ok: true, message: 'Провери имейла си за код за потвърждение' });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/auth/confirm
+  app.post('/api/auth/confirm', (req, res) => {
+    const { email, code } = req.body as { email: string; code: string };
+    const ok = confirmUser(email, code);
+    if (!ok) return res.status(400).json({ error: 'Грешен или изтекъл код' });
+    const user = getUserByEmail(email);
+    const token = jwt.sign({ uid: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ ok: true, token, user: { id: user.id, email: user.email, plan: user.plan, actions_used: user.actions_used, actions_limit: user.actions_limit } });
+  });
+
+  // POST /api/auth/login
+  app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body as { email: string; password: string };
+    const user = getUserByEmail(email);
+    if (!user || user.password_hash !== bcryptHash(password))
+      return res.status(401).json({ error: 'Грешен имейл или парола' });
+    if (!user.confirmed)
+      return res.status(403).json({ error: 'Потвърди имейла си преди вход', needsConfirm: true });
+    const token = jwt.sign({ uid: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ ok: true, token, user: { id: user.id, email: user.email, plan: user.plan, actions_used: user.actions_used, actions_limit: user.actions_limit } });
+  });
+
+  // GET /api/auth/me  (verify token)
+  app.get('/api/auth/me', (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const user = getUserById(decoded.uid);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      res.json({ id: user.id, email: user.email, plan: user.plan, actions_used: user.actions_used, actions_limit: user.actions_limit });
+    } catch { res.status(401).json({ error: 'Invalid token' }); }
+  });
+
+  // POST /api/pay/trial — Stripe checkout 0.99 EUR, 1 action
+  app.post('/api/pay/trial', async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Login required' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const user = getUserById(decoded.uid);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const appUrl = process.env.APP_URL || 'http://localhost:3000';
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price_data: { currency: 'eur', product_data: { name: 'AI-Покупки — Пробен достъп (1 търсене)' }, unit_amount: 99 }, quantity: 1 }],
+        mode: 'payment',
+        customer_email: user.email,
+        metadata: { user_id: String(user.id), plan: 'trial' },
+        success_url: `${appUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/`,
+      });
+      res.json({ url: session.url });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/pay/starter — 9.90 EUR/month
+  app.post('/api/pay/starter', async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Login required' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const user = getUserById(decoded.uid);
+      const appUrl = process.env.APP_URL || 'http://localhost:3000';
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price_data: { currency: 'eur', product_data: { name: 'AI-Покупки Стартер — 50 търсения/месец' }, unit_amount: 990, recurring: { interval: 'month' } }, quantity: 1 }],
+        mode: 'subscription',
+        customer_email: user.email,
+        metadata: { user_id: String(user.id), plan: 'starter' },
+        success_url: `${appUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/`,
+      });
+      res.json({ url: session.url });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/pay/pro — 49 EUR/month
+  app.post('/api/pay/pro', async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Login required' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const user = getUserById(decoded.uid);
+      const appUrl = process.env.APP_URL || 'http://localhost:3000';
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price_data: { currency: 'eur', product_data: { name: 'AI-Покупки Про — Неограничено + AI' }, unit_amount: 4900, recurring: { interval: 'month' } }, quantity: 1 }],
+        mode: 'subscription',
+        customer_email: user.email,
+        metadata: { user_id: String(user.id), plan: 'pro' },
+        success_url: `${appUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/`,
+      });
+      res.json({ url: session.url });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/pay/webhook — Stripe webhook (activates plan after payment)
+  app.post('/api/pay/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event: Stripe.Event;
+    try {
+      event = webhookSecret
+        ? stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
+        : JSON.parse(req.body.toString());
+    } catch (e: any) { return res.status(400).json({ error: e.message }); }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = Number(session.metadata?.user_id);
+      const plan = session.metadata?.plan as 'trial' | 'starter' | 'pro';
+      if (userId && plan) {
+        if (plan === 'trial') activateTrialPlan(userId, session.customer as string || '');
+        else activatePaidPlan(userId, plan as 'starter' | 'pro');
+      }
+    }
+    res.json({ received: true });
+  });
+
+  // POST /api/search/full — uses 1 action from user's quota
+  app.post('/api/search/full', async (req, res) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Login required' });
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const ok = useAction(decoded.uid);
+      if (!ok) return res.status(402).json({ error: 'Нямаш оставащи действия. Надстрои плана си.' });
+      const { query } = req.body as { query: string };
+      const results = searchEngine.search(query || '');
+      const products = results.slice(0, 5).map(r => getAllProducts().find((p: any) => p.id === r.id)).filter(Boolean);
+      bumpAnalytics('paid_searches');
+      res.json({ products, actions_left: getUserById(decoded.uid)?.actions_limit - getUserById(decoded.uid)?.actions_used });
+    } catch (e: any) { res.status(401).json({ error: 'Invalid token' }); }
   });
 
   // ── LEGACY ROUTES (backward compat) ─────────────────

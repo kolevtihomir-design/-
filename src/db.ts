@@ -66,6 +66,19 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    confirmed     INTEGER NOT NULL DEFAULT 0,
+    confirm_code  TEXT,
+    plan          TEXT NOT NULL DEFAULT 'trial',
+    actions_used  INTEGER NOT NULL DEFAULT 0,
+    actions_limit INTEGER NOT NULL DEFAULT 1,
+    stripe_customer_id TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   INSERT OR IGNORE INTO analytics (id, total_searches, paid_searches, total_savings_eur, total_orders)
   VALUES (1, 842, 623, 145320, 287);
 `);
@@ -134,4 +147,45 @@ export function getAnalytics() {
 
 export function bumpAnalytics(field: 'total_searches' | 'paid_searches' | 'total_orders', savingsEur = 0) {
   db.prepare(`UPDATE analytics SET ${field}=${field}+1, total_savings_eur=total_savings_eur+? WHERE id=1`).run(savingsEur);
+}
+
+// ── User helpers ──────────────────────────────────────────────
+export function createUser(email: string, passwordHash: string, confirmCode: string) {
+  const res = db.prepare(
+    'INSERT INTO users (email, password_hash, confirm_code) VALUES (?,?,?)'
+  ).run(email, passwordHash, confirmCode);
+  return Number(res.lastInsertRowid);
+}
+
+export function getUserByEmail(email: string) {
+  return db.prepare('SELECT * FROM users WHERE email=?').get(email) as any;
+}
+
+export function getUserById(id: number) {
+  return db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;
+}
+
+export function confirmUser(email: string, code: string): boolean {
+  const u = db.prepare('SELECT * FROM users WHERE email=? AND confirm_code=?').get(email, code) as any;
+  if (!u) return false;
+  db.prepare('UPDATE users SET confirmed=1, confirm_code=NULL WHERE id=?').run(u.id);
+  return true;
+}
+
+export function activateTrialPlan(userId: number, stripeCustomerId: string) {
+  db.prepare(
+    "UPDATE users SET plan='trial', actions_limit=1, stripe_customer_id=? WHERE id=?"
+  ).run(stripeCustomerId, userId);
+}
+
+export function activatePaidPlan(userId: number, plan: 'starter' | 'pro') {
+  const limit = plan === 'pro' ? 999999 : 50;
+  db.prepare("UPDATE users SET plan=?, actions_limit=?, actions_used=0 WHERE id=?").run(plan, limit, userId);
+}
+
+export function useAction(userId: number): boolean {
+  const u = db.prepare('SELECT actions_used, actions_limit FROM users WHERE id=?').get(userId) as any;
+  if (!u || u.actions_used >= u.actions_limit) return false;
+  db.prepare('UPDATE users SET actions_used=actions_used+1 WHERE id=?').run(userId);
+  return true;
 }

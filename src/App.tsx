@@ -342,7 +342,7 @@ export default function App() {
                   <Package size={24} />
                 </div>
                 <h2 className="text-2xl font-black mb-2">Отключи пълния достъп</h2>
-                <p className="text-gray-400 text-sm">Неограничено търсене · DHL логистика · AI препоръки · Ценов одит</p>
+                <p className="text-gray-400 text-sm">Неограничено търсене · DHL логистика · AI предложения · Ценов одит</p>
               </div>
 
               {demoResult && (
@@ -353,7 +353,7 @@ export default function App() {
                     <span className="font-bold text-green-400">{fmt(demoResult.factory_price - demoResult.negotiated_price)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-1 pt-2 border-t border-white/5">
-                    <span className="text-gray-400">ROI спрямо 9.90 EUR/мес.</span>
+                    <span className="text-gray-400">ROI в посока 9,90 EUR/мес.</span>
                     <span className="font-black text-green-400">{Math.round((demoResult.factory_price - demoResult.negotiated_price) / 9.9)}x</span>
                   </div>
                 </div>

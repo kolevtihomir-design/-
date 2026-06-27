@@ -1,6 +1,8 @@
-FROM node:20-slim AS builder
+FROM node:20-slim
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 RUN npm install
@@ -8,22 +10,8 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM node:20-slim
-
-WORKDIR /app
-
-COPY --from=builder /app/package*.json ./
-RUN npm install --production
-
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server.ts ./
-COPY --from=builder /app/tsconfig.json ./
-
-# Install tsx to run the typescript server
-RUN npm install -g tsx
-
 EXPOSE 3000
 
 ENV NODE_ENV=production
 
-CMD ["tsx", "server.ts"]
+CMD ["npm", "start"]

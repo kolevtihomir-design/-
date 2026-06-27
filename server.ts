@@ -7,55 +7,72 @@ import MiniSearch from 'minisearch';
 import Stripe from 'stripe';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import {
+  db, getAllProducts, upsertProduct, deleteProduct, getProductById,
+  saveSession, sessionExists, dbCacheGet, dbCacheSet, getAnalytics, bumpAnalytics,
+} from './src/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============================================================
-// B2B PRODUCT CATALOG — 25 real industrial products
+// SEED CATALOG — runs once if DB is empty
 // ============================================================
-const B2B_CATALOG = [
-  { id: '1',  name: 'Хидравлична помпа 380V 15kW',           category: 'Машини',           supplier: 'Guangzhou Industrial Co.',    factory_price: 2400,  negotiated_price: 1680,  discount_pct: 30, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 38,  tags: 'помпа хидравлика машини 380v индустриален' },
-  { id: '2',  name: 'CNC Рутер 3-осен 1300x2500mm',           category: 'Машини',           supplier: 'Jinan CNC Factory',           factory_price: 8500,  negotiated_price: 5950,  discount_pct: 30, delivery_days: 14, warehouse: 'Джинан, CN',   moq: 1,   weight_kg: 850, tags: 'cnc рутер фреза дърводелство 1325' },
-  { id: '3',  name: 'Индустриален компресор 7.5kW 300L',       category: 'Компресори',       supplier: 'Shanghai Compressor Ltd',     factory_price: 1200,  negotiated_price: 840,   discount_pct: 30, delivery_days: 10, warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 120, tags: 'компресор въздух индустриален 7.5kw 300l' },
-  { id: '4',  name: 'Електрическа количка 2T',                 category: 'Транспорт',        supplier: 'Hangzhou Forklift Co.',       factory_price: 12000, negotiated_price: 8400,  discount_pct: 30, delivery_days: 21, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 3200,tags: 'количка електрическа 2т склад' },
-  { id: '5',  name: 'LED Прожектор Highbay 200W IP65',         category: 'Осветление',       supplier: 'Shenzhen LED Corp',           factory_price: 45,    negotiated_price: 28,    discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 50,  weight_kg: 2.8, tags: 'led highbay прожектор 200w склад цех осветление' },
-  { id: '6',  name: 'VFD Честотен инвертор 7.5kW 380V',        category: 'Електроника',      supplier: 'Inovance Technology',         factory_price: 320,   negotiated_price: 220,   discount_pct: 31, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 5,   weight_kg: 3.2, tags: 'vfd инвертор честотен 7.5kw честота двигател' },
-  { id: '7',  name: 'Заваръчен апарат MIG 350A 3-фазен',       category: 'Заваряване',       supplier: 'Jasic Welding Equipment',     factory_price: 890,   negotiated_price: 620,   discount_pct: 30, delivery_days: 8,  warehouse: 'Джуджоу, CN',  moq: 1,   weight_kg: 22,  tags: 'заваряване мig 350a сварка 3-фазен' },
-  { id: '8',  name: 'Електрически двигател IE3 11kW B3',        category: 'Двигатели',        supplier: 'NEMA Motors International',  factory_price: 780,   negotiated_price: 540,   discount_pct: 31, delivery_days: 9,  warehouse: 'Тянджин, CN',  moq: 1,   weight_kg: 58,  tags: 'двигател електрически ie3 11kw асинхронен' },
-  { id: '9',  name: 'PLC Контролер S7-1200 Compatible',         category: 'Автоматизация',    supplier: 'Compatible Automation Ltd',  factory_price: 280,   negotiated_price: 190,   discount_pct: 32, delivery_days: 6,  warehouse: 'Шенджен, CN',  moq: 3,   weight_kg: 0.8, tags: 'plc контролер автоматизация siemens s7 1200' },
-  { id: '10', name: 'Термална камера -20/+550°C',               category: 'Измерване',        supplier: 'HikMicro Technology',        factory_price: 1800,  negotiated_price: 1250,  discount_pct: 31, delivery_days: 10, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 0.5, tags: 'термална камера температура flir инфрачервена измерване' },
-  { id: '11', name: 'Пневматичен цилиндър 50x200mm 10бр',       category: 'Пневматика',       supplier: 'AirTAC International',       factory_price: 240,   negotiated_price: 165,   discount_pct: 31, delivery_days: 7,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 6,   tags: 'пневматика цилиндър пневматичен airtac 50x200' },
-  { id: '12', name: 'UPS Промишлен 6kVA Online',                category: 'Електроника',      supplier: 'Huawei Power Ltd',           factory_price: 1400,  negotiated_price: 975,   discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 35,  tags: 'ups промишлен непрекъснато 6kva online power' },
-  { id: '13', name: 'Хидравлично масло ISO VG 46, 200L',        category: 'Смазочни',         supplier: 'SinoPec Lubricants',         factory_price: 480,   negotiated_price: 330,   discount_pct: 31, delivery_days: 12, warehouse: 'Бейджин, CN',  moq: 1,   weight_kg: 185, tags: 'масло хидравлично iso vg46 200l смазка' },
-  { id: '14', name: 'Дебиломер DN50 Ултразвуков',               category: 'Измерване',        supplier: 'Sino Measurement Co.',       factory_price: 640,   negotiated_price: 440,   discount_pct: 31, delivery_days: 8,  warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 2.5, tags: 'дебиломер flowmeter dn50 ултразвуков digital измерване' },
-  { id: '15', name: 'Стоманена тръба 50x50x3mm 6m 100бр',       category: 'Метали',           supplier: 'Baosteel Group Corp',        factory_price: 18,    negotiated_price: 12,    discount_pct: 33, delivery_days: 14, warehouse: 'Шанхай, CN',   moq: 100, weight_kg: 26,  tags: 'тръба стоманена квадратна 50x50 метал конструкция' },
-  { id: '16', name: 'Лагер 6205-2RS 100бр',                     category: 'Механика',         supplier: 'NSK Bearings Compatible',    factory_price: 180,   negotiated_price: 120,   discount_pct: 33, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 100, weight_kg: 4,   tags: 'лагер bearing 6205 2rs механика' },
-  { id: '17', name: 'Индустриален изсушител 80L/ден',            category: 'Климатизация',     supplier: 'Bry-Air Asia',               factory_price: 820,   negotiated_price: 570,   discount_pct: 30, delivery_days: 9,  warehouse: 'Гуанджоу, CN', moq: 1,   weight_kg: 28,  tags: 'изсушител dehumidifier климатизация промишлен 80l' },
-  { id: '18', name: 'Промишлен вентилатор 3-фазен 0.75kW',       category: 'Климатизация',     supplier: 'Ziehl-Abegg Compatible',     factory_price: 380,   negotiated_price: 260,   discount_pct: 32, delivery_days: 7,  warehouse: 'Шанхай, CN',   moq: 2,   weight_kg: 8,   tags: 'вентилатор промишлен 3-фазен 0.75kw климатизация' },
-  { id: '19', name: 'Индустриален суич 24-порта',                category: 'Мрежи',            supplier: 'H3C Technologies Co.',       factory_price: 420,   negotiated_price: 290,   discount_pct: 31, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.8, tags: 'прекъсвач switch 24-порта мрежа lan индустриален' },
-  { id: '20', name: 'Лентова шлайфмашина 150x1220mm',            category: 'Инструменти',      supplier: 'Metabo Compatible',          factory_price: 560,   negotiated_price: 385,   discount_pct: 31, delivery_days: 7,  warehouse: 'Ченду, CN',    moq: 1,   weight_kg: 15,  tags: 'шлайфмашина лентова 150mm шлайф инструмент' },
-  { id: '21', name: 'Предпазни ръкавици Cut-5 24 чифта',         category: 'ЛПС',              supplier: 'Ansell Healthcare',          factory_price: 120,   negotiated_price: 75,    discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 1.5, tags: 'ръкавици cut-5 предпазни лпс безопасност' },
-  { id: '22', name: 'Въглеродна стоманена плоча 4mm 1x2m',       category: 'Метали',           supplier: 'Ansteel Metal Group',        factory_price: 68,    negotiated_price: 47,    discount_pct: 31, delivery_days: 14, warehouse: 'Аншан, CN',    moq: 10,  weight_kg: 62,  tags: 'плоча стоманена въглеродна 4mm метал лист' },
-  { id: '23', name: 'Тръбни фитинги 304 SS 200бр',               category: 'Тръбопроводи',     supplier: 'YongGao Pipe Fittings',      factory_price: 380,   negotiated_price: 260,   discount_pct: 32, delivery_days: 8,  warehouse: 'Вензджоу, CN', moq: 1,   weight_kg: 12,  tags: 'фитинги тръба 304 ss неръждаема стомана тръбопровод' },
-  { id: '24', name: 'Бояджийски пистолет HVLP 1.4mm',            category: 'Инструменти',      supplier: 'Devilbiss Compatible',       factory_price: 560,   negotiated_price: 385,   discount_pct: 31, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 0.9, tags: 'пистолет боядисване hvlp 1.4mm лакиране' },
-  { id: '25', name: 'Power Quality Анализатор',                   category: 'Измерване',        supplier: 'Fluke Compatible',           factory_price: 1200,  negotiated_price: 835,   discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.5, tags: 'честотомер мрежа анализатор power quality fluke измерване' },
+const SEED = [
+  { name: 'Хидравлична помпа 380V 15kW',           category: 'Машини',           supplier: 'Guangzhou Industrial Co.',    factory_price: 2400,  negotiated_price: 1680,  discount_pct: 30, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 38,  tags: 'помпа хидравлика машини 380v индустриален' },
+  { name: 'CNC Рутер 3-осен 1300x2500mm',           category: 'Машини',           supplier: 'Jinan CNC Factory',           factory_price: 8500,  negotiated_price: 5950,  discount_pct: 30, delivery_days: 14, warehouse: 'Джинан, CN',   moq: 1,   weight_kg: 850, tags: 'cnc рутер фреза дърводелство 1325' },
+  { name: 'Индустриален компресор 7.5kW 300L',       category: 'Компресори',       supplier: 'Shanghai Compressor Ltd',     factory_price: 1200,  negotiated_price: 840,   discount_pct: 30, delivery_days: 10, warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 120, tags: 'компресор въздух индустриален 7.5kw 300l' },
+  { name: 'Електрическа количка 2T',                 category: 'Транспорт',        supplier: 'Hangzhou Forklift Co.',       factory_price: 12000, negotiated_price: 8400,  discount_pct: 30, delivery_days: 21, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 3200,tags: 'количка електрическа 2т склад' },
+  { name: 'LED Прожектор Highbay 200W IP65',         category: 'Осветление',       supplier: 'Shenzhen LED Corp',           factory_price: 45,    negotiated_price: 28,    discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 50,  weight_kg: 2.8, tags: 'led highbay прожектор 200w склад цех осветление' },
+  { name: 'VFD Честотен инвертор 7.5kW 380V',        category: 'Електроника',      supplier: 'Inovance Technology',         factory_price: 320,   negotiated_price: 220,   discount_pct: 31, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 5,   weight_kg: 3.2, tags: 'vfd инвертор честотен 7.5kw честота двигател' },
+  { name: 'Заваръчен апарат MIG 350A 3-фазен',       category: 'Заваряване',       supplier: 'Jasic Welding Equipment',     factory_price: 890,   negotiated_price: 620,   discount_pct: 30, delivery_days: 8,  warehouse: 'Джуджоу, CN',  moq: 1,   weight_kg: 22,  tags: 'заваряване мig 350a сварка 3-фазен' },
+  { name: 'Електрически двигател IE3 11kW B3',        category: 'Двигатели',        supplier: 'NEMA Motors International',  factory_price: 780,   negotiated_price: 540,   discount_pct: 31, delivery_days: 9,  warehouse: 'Тянджин, CN',  moq: 1,   weight_kg: 58,  tags: 'двигател електрически ie3 11kw асинхронен' },
+  { name: 'PLC Контролер S7-1200 Compatible',         category: 'Автоматизация',    supplier: 'Compatible Automation Ltd',  factory_price: 280,   negotiated_price: 190,   discount_pct: 32, delivery_days: 6,  warehouse: 'Шенджен, CN',  moq: 3,   weight_kg: 0.8, tags: 'plc контролер автоматизация siemens s7 1200' },
+  { name: 'Термална камера -20/+550°C',               category: 'Измерване',        supplier: 'HikMicro Technology',        factory_price: 1800,  negotiated_price: 1250,  discount_pct: 31, delivery_days: 10, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 0.5, tags: 'термална камера температура flir инфрачервена измерване' },
+  { name: 'Пневматичен цилиндър 50x200mm 10бр',       category: 'Пневматика',       supplier: 'AirTAC International',       factory_price: 240,   negotiated_price: 165,   discount_pct: 31, delivery_days: 7,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 6,   tags: 'пневматика цилиндър пневматичен airtac 50x200' },
+  { name: 'UPS Промишлен 6kVA Online',                category: 'Електроника',      supplier: 'Huawei Power Ltd',           factory_price: 1400,  negotiated_price: 975,   discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 35,  tags: 'ups промишлен непрекъснато 6kva online power' },
+  { name: 'Хидравлично масло ISO VG 46, 200L',        category: 'Смазочни',         supplier: 'SinoPec Lubricants',         factory_price: 480,   negotiated_price: 330,   discount_pct: 31, delivery_days: 12, warehouse: 'Бейджин, CN',  moq: 1,   weight_kg: 185, tags: 'масло хидравлично iso vg46 200l смазка' },
+  { name: 'Дебиломер DN50 Ултразвуков',               category: 'Измерване',        supplier: 'Sino Measurement Co.',       factory_price: 640,   negotiated_price: 440,   discount_pct: 31, delivery_days: 8,  warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 2.5, tags: 'дебиломер flowmeter dn50 ултразвуков digital измерване' },
+  { name: 'Стоманена тръба 50x50x3mm 6m 100бр',       category: 'Метали',           supplier: 'Baosteel Group Corp',        factory_price: 18,    negotiated_price: 12,    discount_pct: 33, delivery_days: 14, warehouse: 'Шанхай, CN',   moq: 100, weight_kg: 26,  tags: 'тръба стоманена квадратна 50x50 метал конструкция' },
+  { name: 'Лагер 6205-2RS 100бр',                     category: 'Механика',         supplier: 'NSK Bearings Compatible',    factory_price: 180,   negotiated_price: 120,   discount_pct: 33, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 100, weight_kg: 4,   tags: 'лагер bearing 6205 2rs механика' },
+  { name: 'Индустриален изсушител 80L/ден',            category: 'Климатизация',     supplier: 'Bry-Air Asia',               factory_price: 820,   negotiated_price: 570,   discount_pct: 30, delivery_days: 9,  warehouse: 'Гуанджоу, CN', moq: 1,   weight_kg: 28,  tags: 'изсушител dehumidifier климатизация промишлен 80l' },
+  { name: 'Промишлен вентилатор 3-фазен 0.75kW',       category: 'Климатизация',     supplier: 'Ziehl-Abegg Compatible',     factory_price: 380,   negotiated_price: 260,   discount_pct: 32, delivery_days: 7,  warehouse: 'Шанхай, CN',   moq: 2,   weight_kg: 8,   tags: 'вентилатор промишлен 3-фазен 0.75kw климатизация' },
+  { name: 'Индустриален суич 24-порта',                category: 'Мрежи',            supplier: 'H3C Technologies Co.',       factory_price: 420,   negotiated_price: 290,   discount_pct: 31, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.8, tags: 'прекъсвач switch 24-порта мрежа lan индустриален' },
+  { name: 'Лентова шлайфмашина 150x1220mm',            category: 'Инструменти',      supplier: 'Metabo Compatible',          factory_price: 560,   negotiated_price: 385,   discount_pct: 31, delivery_days: 7,  warehouse: 'Ченду, CN',    moq: 1,   weight_kg: 15,  tags: 'шлайфмашина лентова 150mm шлайф инструмент' },
+  { name: 'Предпазни ръкавици Cut-5 24 чифта',         category: 'ЛПС',              supplier: 'Ansell Healthcare',          factory_price: 120,   negotiated_price: 75,    discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 1.5, tags: 'ръкавици cut-5 предпазни лпс безопасност' },
+  { name: 'Въглеродна стоманена плоча 4mm 1x2m',       category: 'Метали',           supplier: 'Ansteel Metal Group',        factory_price: 68,    negotiated_price: 47,    discount_pct: 31, delivery_days: 14, warehouse: 'Аншан, CN',    moq: 10,  weight_kg: 62,  tags: 'плоча стоманена въглеродна 4mm метал лист' },
+  { name: 'Тръбни фитинги 304 SS 200бр',               category: 'Тръбопроводи',     supplier: 'YongGao Pipe Fittings',      factory_price: 380,   negotiated_price: 260,   discount_pct: 32, delivery_days: 8,  warehouse: 'Вензджоу, CN', moq: 1,   weight_kg: 12,  tags: 'фитинги тръба 304 ss неръждаема стомана тръбопровод' },
+  { name: 'Бояджийски пистолет HVLP 1.4mm',            category: 'Инструменти',      supplier: 'Devilbiss Compatible',       factory_price: 560,   negotiated_price: 385,   discount_pct: 31, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 0.9, tags: 'пистолет боядисване hvlp 1.4mm лакиране' },
+  { name: 'Power Quality Анализатор',                   category: 'Измерване',        supplier: 'Fluke Compatible',           factory_price: 1200,  negotiated_price: 835,   discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.5, tags: 'честотомер мрежа анализатор power quality fluke измерване' },
 ];
 
+// Seed only if products table is empty
+const productCount = (db.prepare('SELECT COUNT(*) as n FROM products').get() as any).n;
+if (productCount === 0) {
+  SEED.forEach(p => upsertProduct(p));
+  console.log(`DB seeded with ${SEED.length} products`);
+}
+
 // ============================================================
-// MINISEARCH — real full-text search engine
+// MINISEARCH — rebuilt from DB on startup (and after admin changes)
 // ============================================================
-const searchEngine = new MiniSearch({
-  fields: ['name', 'category', 'supplier', 'tags'],
-  storeFields: ['id', 'name', 'category', 'supplier', 'factory_price', 'negotiated_price', 'discount_pct', 'delivery_days', 'warehouse', 'moq', 'weight_kg', 'tags'],
-  searchOptions: {
-    boost: { name: 3, category: 1.5, tags: 2 },
-    fuzzy: 0.25,
-    prefix: true,
-  }
-});
-searchEngine.addAll(B2B_CATALOG);
-console.log(`MiniSearch: indexed ${B2B_CATALOG.length} products`);
+function buildSearchIndex() {
+  const engine = new MiniSearch({
+    fields: ['name', 'category', 'supplier', 'tags'],
+    storeFields: ['id', 'name', 'category', 'supplier', 'factory_price', 'negotiated_price', 'discount_pct', 'delivery_days', 'warehouse', 'moq', 'weight_kg', 'tags'],
+    searchOptions: {
+      boost: { name: 3, tags: 2.5, category: 1.5 },
+      fuzzy: 0.25,
+      prefix: true,
+    }
+  });
+  const products = getAllProducts();
+  engine.addAll(products);
+  console.log(`MiniSearch: indexed ${products.length} products from DB`);
+  return engine;
+}
+
+let searchEngine = buildSearchIndex();
 
 // ============================================================
 // STRIPE
@@ -80,42 +97,14 @@ function verifyAccessToken(token: string): boolean {
   }
 }
 
-// ============================================================
-// IN-MEMORY API CACHE — avoids burning free-tier quotas
-// ============================================================
-interface CacheEntry<T> { data: T; expiresAt: number; }
-const apiCache = new Map<string, CacheEntry<any>>();
-
-function cacheGet<T>(key: string): T | null {
-  const entry = apiCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) { apiCache.delete(key); return null; }
-  return entry.data as T;
-}
-
-function cacheSet<T>(key: string, data: T, ttlMs: number) {
-  apiCache.set(key, { data, expiresAt: Date.now() + ttlMs });
-}
-
-// ============================================================
-// ANALYTICS STORE
-// ============================================================
-let analytics = {
-  total_searches: 842,
-  paid_searches: 623,
-  total_savings_eur: 145320,
-  total_orders: 287,
-  avg_discount_pct: 31.2,
-  demo_to_paid_rate: 74,
-  top_categories: ['Машини', 'Електроника', 'Метали'],
-};
+// Analytics and cache are now in SQLite — see db.ts
 
 // ============================================================
 // LOGISTICS — Easyship (free) → ShippingRates.org (free) → model fallback
 // ============================================================
 async function getDHLLogistics(product: string, weightKg: number) {
   const cacheKey = `logistics:${Math.round(weightKg)}`;
-  const cached = cacheGet<any>(cacheKey);
+  const cached = dbCacheGet<any>(cacheKey);
   if (cached) return { ...cached, source: cached.source + ' (кеш)' };
 
   // ── Option 1: Easyship (free plan, signup at easyship.com) ──
@@ -161,7 +150,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
             currency: 'EUR',
             warehouse: 'Шенджен, CN',
           };
-          cacheSet(cacheKey, result, 60 * 60 * 1000); // 1h cache
+          dbCacheSet(cacheKey, result, 60 * 60 * 1000);
           return result;
         }
       }
@@ -195,7 +184,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
         currency: 'EUR',
         warehouse: 'Шенджен, CN',
       };
-      cacheSet(cacheKey, result2, 60 * 60 * 1000); // 1h cache
+      dbCacheSet(cacheKey, result2, 60 * 60 * 1000);
       return result2;
     }
   } catch (e: any) {
@@ -221,7 +210,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
 // ============================================================
 async function getKeepaPrice(productName: string, factoryPrice: number) {
   const cacheKey = `price:${productName.toLowerCase().slice(0, 30)}`;
-  const cached = cacheGet<any>(cacheKey);
+  const cached = dbCacheGet<any>(cacheKey);
   if (cached) return { ...cached, source: cached.source + ' (кеш)' };
 
   // ── Option 1: SerpAPI Google Shopping (100 free searches/month) ──
@@ -251,7 +240,7 @@ async function getKeepaPrice(productName: string, factoryPrice: number) {
               market_position: ourPrice < avgMarket ? 'BELOW_MARKET' : 'ABOVE_MARKET',
               sample_offers: items.slice(0, 3).map((i: any) => ({ title: i.title, price: i.price, source: i.source })),
             };
-            cacheSet(cacheKey, priceResult, 24 * 60 * 60 * 1000); // 24h cache
+            dbCacheSet(cacheKey, priceResult, 24 * 60 * 60 * 1000);
             return priceResult;
           }
         }
@@ -289,17 +278,18 @@ function cosineSim(a: number[], b: number[]): number {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10);
 }
 
-function tfidfScore(query: string, product: typeof B2B_CATALOG[0]): number {
+function tfidfScore(query: string, product: any): number {
+  const catalog = getAllProducts() as any[];
   const text = `${product.name} ${product.category} ${product.tags}`.toLowerCase();
   const terms = text.split(/\s+/);
   const queryTerms = query.toLowerCase().split(/\s+/);
   let score = 0;
   for (const qt of queryTerms) {
     const tf = terms.filter(t => t.includes(qt) || qt.includes(t)).length / terms.length;
-    const docsWithTerm = B2B_CATALOG.filter(p =>
+    const docsWithTerm = catalog.filter(p =>
       `${p.name} ${p.category} ${p.tags}`.toLowerCase().includes(qt)
     ).length;
-    const idf = Math.log((B2B_CATALOG.length + 1) / (docsWithTerm + 1));
+    const idf = Math.log((catalog.length + 1) / (docsWithTerm + 1));
     score += tf * idf;
   }
   return score + product.discount_pct / 1000;
@@ -307,10 +297,11 @@ function tfidfScore(query: string, product: typeof B2B_CATALOG[0]): number {
 
 async function getMLRecommendations(query: string, excludeId: string, limit = 5) {
   const HF_TOKEN = process.env.HF_API_TOKEN || '';
+  const catalog = getAllProducts() as any[];
 
   if (HF_TOKEN) {
     try {
-      const candidates = B2B_CATALOG.filter(p => p.id !== excludeId);
+      const candidates = catalog.filter(p => String(p.id) !== excludeId);
       const sentences = candidates.map(p => `${p.name} ${p.category}`);
 
       const res = await fetch(
@@ -339,8 +330,8 @@ async function getMLRecommendations(query: string, excludeId: string, limit = 5)
   }
 
   // TF-IDF fallback (real ML algorithm)
-  return B2B_CATALOG
-    .filter(p => p.id !== excludeId)
+  return catalog
+    .filter(p => String(p.id) !== excludeId)
     .map(p => ({ ...p, ml_score: tfidfScore(query, p), model: 'TF-IDF (local)' }))
     .sort((a, b) => b.ml_score - a.ml_score)
     .slice(0, limit);
@@ -406,14 +397,14 @@ async function startServer() {
     res.json({
       status: 'ok',
       name: 'AI-Pokupki B2B Platform',
-      catalog_size: B2B_CATALOG.length,
+      catalog_size: (db.prepare('SELECT COUNT(*) as n FROM products WHERE active=1').get() as any).n,
       search_engine: 'MiniSearch v7',
       ml_model: 'all-MiniLM-L6-v2 (HuggingFace)',
       stripe: !!process.env.STRIPE_SECRET_KEY,
       easyship: !!process.env.EASYSHIP_API_KEY,
       serpapi: !!process.env.SERPAPI_KEY,
       hf: !!process.env.HF_API_TOKEN,
-      cache_entries: apiCache.size,
+      cache_entries: (db.prepare("SELECT COUNT(*) as n FROM api_cache WHERE expires_at > datetime('now')").get() as any).n,
       jwt: 'enabled',
     });
   });
@@ -425,10 +416,10 @@ async function startServer() {
 
     const results = searchEngine.search(query).slice(0, 1);
     if (!results.length) {
-      // Fuzzy fallback — return best catalog match
-      const fallback = B2B_CATALOG.find(p =>
+      const catalog = getAllProducts() as any[];
+      const fallback = catalog.find(p =>
         p.name.toLowerCase().includes(query.toLowerCase().slice(0, 5))
-      ) || B2B_CATALOG[0];
+      ) || catalog[0];
       results.push(fallback as any);
     }
 
@@ -436,7 +427,7 @@ async function startServer() {
     const savings = product.factory_price - product.negotiated_price;
     const roi_annual = savings * 12;
 
-    analytics.total_searches++;
+    bumpAnalytics('total_searches');
 
     res.json({
       success: true,
@@ -459,8 +450,8 @@ async function startServer() {
     if (!query?.trim()) return res.status(400).json({ error: 'Query required' });
 
     const results = searchEngine.search(query).slice(0, 10);
-    analytics.total_searches++;
-    analytics.paid_searches++;
+    bumpAnalytics('total_searches');
+    bumpAnalytics('paid_searches');
 
     res.json({
       success: true,
@@ -506,9 +497,12 @@ async function startServer() {
 
   // ── ANALYTICS ────────────────────────────────────────
   app.get('/api/analytics', (_req, res) => {
+    const a = getAnalytics();
     res.json({
       success: true,
-      ...analytics,
+      ...a,
+      top_categories: ['Машини', 'Електроника', 'Метали'],
+      demo_to_paid_rate: a.total_searches > 0 ? Math.round((a.paid_searches / a.total_searches) * 100) : 0,
       timestamp: new Date().toISOString(),
     });
   });
@@ -548,7 +542,7 @@ async function startServer() {
       }
       // Dev mode only — grant access directly without payment
       const testToken = signAccessToken('dev_' + Date.now());
-      analytics.paid_searches++;
+      bumpAnalytics('paid_searches');
       res.json({ success: true, test_token: testToken, test_mode: true });
     }
   });
@@ -568,8 +562,8 @@ async function startServer() {
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
-        analytics.paid_searches++;
-        analytics.total_savings_eur += 720;
+        bumpAnalytics('paid_searches');
+        bumpAnalytics('paid_searches', 720);
         console.log(`Payment confirmed: ${session.id}`);
       }
       res.json({ received: true });
@@ -593,7 +587,7 @@ async function startServer() {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       if (session.payment_status === 'paid') {
         const jwtToken = signAccessToken(sessionId);
-        analytics.paid_searches++;
+        bumpAnalytics('paid_searches');
         return res.json({ paid: true, token: jwtToken });
       }
     } catch (e) {
@@ -601,6 +595,51 @@ async function startServer() {
     }
 
     res.json({ paid: false });
+  });
+
+  // ── ADMIN API (password protected) ──────────────────
+  const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'admin123';
+
+  function adminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const auth = req.headers['x-admin-key'] || req.query.key;
+    if (auth !== ADMIN_PASS) return res.status(401).json({ error: 'Unauthorized' });
+    next();
+  }
+
+  app.get('/api/admin/products', adminAuth, (_req, res) => {
+    res.json({ success: true, products: getAllProducts() });
+  });
+
+  app.post('/api/admin/products', adminAuth, (req, res) => {
+    const { name, category, supplier, factory_price, negotiated_price, discount_pct,
+            delivery_days, warehouse, moq, weight_kg, tags } = req.body;
+    if (!name || !category || !factory_price) return res.status(400).json({ error: 'name, category, factory_price required' });
+    const id = upsertProduct({ name, category, supplier: supplier || '', factory_price, negotiated_price: negotiated_price || factory_price * 0.7,
+      discount_pct: discount_pct || 30, delivery_days: delivery_days || 10, warehouse: warehouse || 'Шенджен, CN',
+      moq: moq || 1, weight_kg: weight_kg || 1, tags: tags || '' });
+    searchEngine = buildSearchIndex();
+    res.json({ success: true, id });
+  });
+
+  app.put('/api/admin/products/:id', adminAuth, (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = getProductById(id) as any;
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    upsertProduct({ ...existing, ...req.body, id });
+    searchEngine = buildSearchIndex();
+    res.json({ success: true });
+  });
+
+  app.delete('/api/admin/products/:id', adminAuth, (req, res) => {
+    deleteProduct(parseInt(req.params.id));
+    searchEngine = buildSearchIndex();
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/analytics', adminAuth, (_req, res) => {
+    const a = getAnalytics();
+    const recent = db.prepare("SELECT * FROM order_log ORDER BY created_at DESC LIMIT 20").all();
+    res.json({ success: true, analytics: a, recent_orders: recent });
   });
 
   // ── LEGACY ROUTES (backward compat) ─────────────────
@@ -631,7 +670,8 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 AI-Pokupki B2B Platform — port ${PORT} [${isProd ? 'Production' : 'Development'}]`);
-    console.log(`   MiniSearch: ${B2B_CATALOG.length} products indexed`);
+    console.log(`   SQLite DB: data/pokupki.db`);
+    console.log(`   MiniSearch: ${(db.prepare('SELECT COUNT(*) as n FROM products WHERE active=1').get() as any).n} products indexed`);
     console.log(`   DHL API: ${process.env.DHL_API_KEY ? 'configured' : 'fallback mode'}`);
     console.log(`   Keepa API: ${process.env.KEEPA_API_KEY ? 'configured' : 'fallback mode'}`);
     console.log(`   HuggingFace: ${process.env.HF_API_TOKEN ? 'configured' : 'TF-IDF mode'}`);

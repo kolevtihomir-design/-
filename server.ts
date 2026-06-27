@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import MiniSearch from 'minisearch';
 import Stripe from 'stripe';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,9 +63,39 @@ console.log(`MiniSearch: indexed ${B2B_CATALOG.length} products`);
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 
 // ============================================================
-// IN-MEMORY SESSION STORE (paid access tokens)
+// JWT — signed session tokens (survives memory; verify on every request)
 // ============================================================
-const paidSessions = new Set<string>();
+const JWT_SECRET = process.env.JWT_SECRET || 'ai-pokupki-dev-secret-' + Math.random().toString(36).slice(2);
+
+function signAccessToken(sessionId: string) {
+  return jwt.sign({ sid: sessionId, paid: true }, JWT_SECRET, { expiresIn: '30d' });
+}
+
+function verifyAccessToken(token: string): boolean {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    return !!decoded?.paid;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================
+// IN-MEMORY API CACHE — avoids burning free-tier quotas
+// ============================================================
+interface CacheEntry<T> { data: T; expiresAt: number; }
+const apiCache = new Map<string, CacheEntry<any>>();
+
+function cacheGet<T>(key: string): T | null {
+  const entry = apiCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { apiCache.delete(key); return null; }
+  return entry.data as T;
+}
+
+function cacheSet<T>(key: string, data: T, ttlMs: number) {
+  apiCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
 
 // ============================================================
 // ANALYTICS STORE
@@ -82,6 +114,9 @@ let analytics = {
 // LOGISTICS — Easyship (free) → ShippingRates.org (free) → model fallback
 // ============================================================
 async function getDHLLogistics(product: string, weightKg: number) {
+  const cacheKey = `logistics:${Math.round(weightKg)}`;
+  const cached = cacheGet<any>(cacheKey);
+  if (cached) return { ...cached, source: cached.source + ' (кеш)' };
 
   // ── Option 1: Easyship (free plan, signup at easyship.com) ──
   const EASYSHIP_KEY = process.env.EASYSHIP_API_KEY;
@@ -117,7 +152,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
         // Find DHL Express or fastest courier
         const dhl = rates.find((r: any) => r.courier_name?.toLowerCase().includes('dhl')) || rates[0];
         if (dhl) {
-          return {
+          const result = {
             source: 'Easyship API (Free Plan)',
             route: 'Шенджен, CN → София, BG',
             service: dhl.courier_name + (dhl.service_name ? ` — ${dhl.service_name}` : ''),
@@ -126,6 +161,8 @@ async function getDHLLogistics(product: string, weightKg: number) {
             currency: 'EUR',
             warehouse: 'Шенджен, CN',
           };
+          cacheSet(cacheKey, result, 60 * 60 * 1000); // 1h cache
+          return result;
         }
       }
     } catch (e: any) {
@@ -149,7 +186,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
 
     if (res.ok) {
       const data = await res.json() as any;
-      return {
+      const result2 = {
         source: 'ShippingRates.org (Free)',
         route: 'Шенджен, CN → Варна/София, BG',
         service: data.service || 'Air Freight Express',
@@ -158,6 +195,8 @@ async function getDHLLogistics(product: string, weightKg: number) {
         currency: 'EUR',
         warehouse: 'Шенджен, CN',
       };
+      cacheSet(cacheKey, result2, 60 * 60 * 1000); // 1h cache
+      return result2;
     }
   } catch (e: any) {
     console.log('ShippingRates.org unavailable, using weight model:', e.message);
@@ -181,6 +220,9 @@ async function getDHLLogistics(product: string, weightKg: number) {
 // PRICE AUDIT — SerpAPI Google Shopping (free 100/mo) → category model
 // ============================================================
 async function getKeepaPrice(productName: string, factoryPrice: number) {
+  const cacheKey = `price:${productName.toLowerCase().slice(0, 30)}`;
+  const cached = cacheGet<any>(cacheKey);
+  if (cached) return { ...cached, source: cached.source + ' (кеш)' };
 
   // ── Option 1: SerpAPI Google Shopping (100 free searches/month) ──
   const SERPAPI_KEY = process.env.SERPAPI_KEY;
@@ -200,7 +242,7 @@ async function getKeepaPrice(productName: string, factoryPrice: number) {
           if (prices.length > 0) {
             const avgMarket = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
             const ourPrice = factoryPrice * 0.7;
-            return {
+            const priceResult = {
               source: `Google Shopping via SerpAPI (${items.length} оферти)`,
               amazon_price_eur: Math.round(avgMarket),
               factory_price_eur: factoryPrice,
@@ -209,6 +251,8 @@ async function getKeepaPrice(productName: string, factoryPrice: number) {
               market_position: ourPrice < avgMarket ? 'BELOW_MARKET' : 'ABOVE_MARKET',
               sample_offers: items.slice(0, 3).map((i: any) => ({ title: i.title, price: i.price, source: i.source })),
             };
+            cacheSet(cacheKey, priceResult, 24 * 60 * 60 * 1000); // 24h cache
+            return priceResult;
           }
         }
       }
@@ -348,6 +392,15 @@ async function startServer() {
     next();
   });
 
+  // Rate limiter: max 10 demo searches per IP per hour (anti-abuse before paywall)
+  const demoRateLimit = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Твърде много заявки. Опитайте след 1 час.', code: 'RATE_LIMITED' },
+  });
+
   // ── HEALTH ──────────────────────────────────────────────
   app.get('/api/health', (_req, res) => {
     res.json({
@@ -357,14 +410,16 @@ async function startServer() {
       search_engine: 'MiniSearch v7',
       ml_model: 'all-MiniLM-L6-v2 (HuggingFace)',
       stripe: !!process.env.STRIPE_SECRET_KEY,
-      dhl: !!process.env.DHL_API_KEY,
-      keepa: !!process.env.KEEPA_API_KEY,
+      easyship: !!process.env.EASYSHIP_API_KEY,
+      serpapi: !!process.env.SERPAPI_KEY,
       hf: !!process.env.HF_API_TOKEN,
+      cache_entries: apiCache.size,
+      jwt: 'enabled',
     });
   });
 
-  // ── DEMO SEARCH (1 free search per session) ─────────────
-  app.post('/api/search/demo', async (req, res) => {
+  // ── DEMO SEARCH (rate limited, 1 free search per session) ──
+  app.post('/api/search/demo', demoRateLimit, async (req, res) => {
     const { query } = req.body;
     if (!query?.trim()) return res.status(400).json({ error: 'Query required' });
 
@@ -398,7 +453,7 @@ async function startServer() {
   // ── FULL SEARCH (paid) ────────────────────────────────
   app.post('/api/search/full', async (req, res) => {
     const { query, token } = req.body;
-    if (!paidSessions.has(token)) {
+    if (!verifyAccessToken(token)) {
       return res.status(402).json({ error: 'Payment required', code: 'UNPAID' });
     }
     if (!query?.trim()) return res.status(400).json({ error: 'Query required' });
@@ -492,8 +547,7 @@ async function startServer() {
         return res.status(500).json({ error: 'Payment service unavailable', message: e.message });
       }
       // Dev mode only — grant access directly without payment
-      const testToken = 'test_' + Date.now();
-      paidSessions.add(testToken);
+      const testToken = signAccessToken('dev_' + Date.now());
       analytics.paid_searches++;
       res.json({ success: true, test_token: testToken, test_mode: true });
     }
@@ -514,7 +568,6 @@ async function startServer() {
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
-        paidSessions.add(session.id);
         analytics.paid_searches++;
         analytics.total_savings_eur += 720;
         console.log(`Payment confirmed: ${session.id}`);
@@ -530,25 +583,21 @@ async function startServer() {
   app.get('/api/verify/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
 
-    // Already in our store
-    if (paidSessions.has(sessionId)) {
+    // JWT token — verify signature (works across restarts)
+    if (verifyAccessToken(sessionId)) {
       return res.json({ paid: true, token: sessionId });
     }
 
-    // Check with Stripe
+    // Stripe session ID — check with Stripe and issue JWT
     try {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       if (session.payment_status === 'paid') {
-        paidSessions.add(sessionId);
+        const jwtToken = signAccessToken(sessionId);
         analytics.paid_searches++;
-        return res.json({ paid: true, token: sessionId });
+        return res.json({ paid: true, token: jwtToken });
       }
     } catch (e) {
-      // Test tokens (test_xxxx) — grant access
-      if (sessionId.startsWith('test_')) {
-        paidSessions.add(sessionId);
-        return res.json({ paid: true, token: sessionId });
-      }
+      // not a Stripe session
     }
 
     res.json({ paid: false });

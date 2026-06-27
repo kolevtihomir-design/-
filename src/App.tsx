@@ -49,8 +49,32 @@ const fmt = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', c
 const DEMO_QUERIES = ['хидравлична помпа', 'компресор', 'led прожектор', 'заваръчен апарат', 'cnc рутер'];
 const CONTACT_EMAIL = 'kolev.tihomir@gmail.com';
 
+type AuthUser = { id: number; email: string; plan: string; actions_used: number; actions_limit: number };
+
+function useAuth() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('ai_token'));
+  useEffect(() => {
+    if (!token) return;
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => { if (u) setUser(u); else { localStorage.removeItem('ai_token'); setToken(null); } });
+  }, [token]);
+  const login = (t: string, u: AuthUser) => { localStorage.setItem('ai_token', t); setToken(t); setUser(u); };
+  const logout = () => { localStorage.removeItem('ai_token'); setToken(null); setUser(null); };
+  return { user, token, login, logout };
+}
+
 export default function App() {
-  const [view, setView] = useState<'search' | 'result' | 'catalog'>('search');
+  const { user, token, login, logout } = useAuth();
+  const [view, setView] = useState<'search' | 'result' | 'catalog' | 'auth'>('search');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'confirm'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authPassword2, setAuthPassword2] = useState('');
+  const [authCode, setAuthCode] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [demoResult, setDemoResult] = useState<Product | null>(null);
@@ -58,6 +82,38 @@ export default function App() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [catalogQuery, setCatalogQuery] = useState('');
+
+  const handleRegister = async () => {
+    setAuthError(''); setAuthLoading(true);
+    if (authPassword !== authPassword2) { setAuthError('Паролите не съвпадат'); setAuthLoading(false); return; }
+    const r = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: authEmail, password: authPassword }) });
+    const d = await r.json();
+    setAuthLoading(false);
+    if (d.ok) { setAuthMode('confirm'); } else setAuthError(d.error);
+  };
+
+  const handleConfirm = async () => {
+    setAuthError(''); setAuthLoading(true);
+    const r = await fetch('/api/auth/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: authEmail, code: authCode }) });
+    const d = await r.json();
+    setAuthLoading(false);
+    if (d.ok) { login(d.token, d.user); setView('search'); } else setAuthError(d.error);
+  };
+
+  const handleLogin = async () => {
+    setAuthError(''); setAuthLoading(true);
+    const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: authEmail, password: authPassword }) });
+    const d = await r.json();
+    setAuthLoading(false);
+    if (d.ok) { login(d.token, d.user); setView('search'); } else { setAuthError(d.error); if (d.needsConfirm) setAuthMode('confirm'); }
+  };
+
+  const handlePay = async (plan: 'trial' | 'starter' | 'pro') => {
+    if (!token) { setView('auth'); setAuthMode('login'); return; }
+    const r = await fetch(`/api/pay/${plan}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const d = await r.json();
+    if (d.url) window.location.href = d.url;
+  };
 
   // Build MiniSearch index in browser
   const engine = useMemo(() => {
@@ -124,15 +180,86 @@ export default function App() {
               className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
               Каталог ({CATALOG.length})
             </button>
-            <button onClick={() => setShowPaywall(true)}
-              className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 rounded-full">
-              от 9.90 EUR / месец →
-            </button>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 hidden sm:block">{user.email}</span>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${user.plan === 'pro' ? 'bg-purple-500/20 text-purple-400' : user.plan === 'starter' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                  {user.plan === 'pro' ? 'Про' : user.plan === 'starter' ? 'Стартер' : `Пробен (${user.actions_limit - user.actions_used} ост.)`}
+                </span>
+                <button onClick={logout} className="text-xs text-gray-500 hover:text-white px-2 py-1">Изход</button>
+              </div>
+            ) : (
+              <button onClick={() => { setView('auth'); setAuthMode('login'); }}
+                className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 rounded-full">
+                Вход / Регистрация
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <AnimatePresence mode="wait">
+        {/* AUTH VIEW */}
+        {view === 'auth' && (
+          <motion.div key="auth" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="relative z-10 max-w-md mx-auto px-6 py-24">
+            <button onClick={() => setView('search')} className="text-gray-500 hover:text-white text-sm mb-8 block">← Обратно</button>
+            <div className="bg-[#0d1118] border border-white/10 rounded-3xl p-8">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <Package size={20} />
+                </div>
+                <h2 className="text-xl font-black">
+                  {authMode === 'login' ? 'Вход' : authMode === 'register' ? 'Регистрация' : 'Потвърди имейл'}
+                </h2>
+              </div>
+
+              {authMode !== 'confirm' && (
+                <>
+                  <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
+                    placeholder="Имейл" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 mb-3 text-sm" />
+                  <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+                    placeholder="Парола" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 mb-3 text-sm" />
+                  {authMode === 'register' && (
+                    <input type="password" value={authPassword2} onChange={e => setAuthPassword2(e.target.value)}
+                      placeholder="Повтори парола" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 mb-3 text-sm" />
+                  )}
+                </>
+              )}
+
+              {authMode === 'confirm' && (
+                <div className="mb-3">
+                  <p className="text-gray-400 text-sm mb-4 text-center">Изпратен код на <span className="text-white">{authEmail}</span></p>
+                  <input type="text" value={authCode} onChange={e => setAuthCode(e.target.value)} maxLength={6}
+                    placeholder="6-цифрен код" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 text-center text-2xl font-mono tracking-widest" />
+                </div>
+              )}
+
+              {authError && <p className="text-red-400 text-xs mb-3 text-center">{authError}</p>}
+
+              <button
+                onClick={authMode === 'login' ? handleLogin : authMode === 'register' ? handleRegister : handleConfirm}
+                disabled={authLoading}
+                className="w-full py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl font-black text-sm hover:opacity-90 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+                {authLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+                {authMode === 'login' ? 'Влез' : authMode === 'register' ? 'Регистрирай се' : 'Потвърди'}
+              </button>
+
+              <div className="mt-4 text-center">
+                {authMode === 'login' ? (
+                  <button onClick={() => { setAuthMode('register'); setAuthError(''); }} className="text-xs text-gray-500 hover:text-white">
+                    Нямаш акаунт? Регистрирай се
+                  </button>
+                ) : authMode === 'register' ? (
+                  <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-xs text-gray-500 hover:text-white">
+                    Вече имаш акаунт? Влез
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* SEARCH VIEW */}
         {view === 'search' && (
           <motion.div key="search" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -359,28 +486,29 @@ export default function App() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              {/* Trial 0.99 EUR */}
+              <button onClick={() => handlePay('trial')}
+                className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-green-500/20 mb-3">
+                Пробен достъп — 0.99 EUR (1 търсене)
+                <ArrowRight size={20} />
+              </button>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 {[
-                  { name: 'Стартер', price: '9.90', desc: '50 търсения/месец' },
-                  { name: 'Про', price: '49', desc: 'Неограничени + AI', highlight: true },
-                ].map(plan => (
-                  <div key={plan.name}
-                    className={`p-4 rounded-2xl border text-left ${plan.highlight ? 'border-blue-500/60 bg-blue-500/10' : 'border-white/10 bg-white/3'}`}>
-                    <div className={`text-xs font-bold mb-1 ${plan.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{plan.name}</div>
-                    <div className="text-xl font-black">{plan.price} <span className="text-sm font-normal text-gray-400">EUR/мес.</span></div>
-                    <div className="text-xs text-gray-500 mt-1">{plan.desc}</div>
-                  </div>
+                  { plan: 'starter' as const, name: 'Стартер', price: '9.90', desc: '50 търсения/месец' },
+                  { plan: 'pro' as const, name: 'Про', price: '49', desc: 'Неограничени + AI', highlight: true },
+                ].map(p => (
+                  <button key={p.name} onClick={() => handlePay(p.plan)}
+                    className={`p-4 rounded-2xl border text-left hover:opacity-80 transition-all ${p.highlight ? 'border-blue-500/60 bg-blue-500/10' : 'border-white/10 bg-white/3'}`}>
+                    <div className={`text-xs font-bold mb-1 ${p.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{p.name}</div>
+                    <div className="text-xl font-black">{p.price} <span className="text-sm font-normal text-gray-400">EUR/мес.</span></div>
+                    <div className="text-xs text-gray-500 mt-1">{p.desc}</div>
+                  </button>
                 ))}
               </div>
 
-              <a href={`mailto:${CONTACT_EMAIL}?subject=AI-Покупки достъп&body=Здравейте, искам достъп до AI-Покупки платформата.`}
-                className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30">
-                Поръчай достъп — {CONTACT_EMAIL}
-                <ArrowRight size={20} />
-              </a>
-
-              <p className="text-center text-xs text-gray-600 mt-3 flex items-center justify-center gap-2">
-                <ShieldCheck size={12} /> Отговор до 24 часа · Плащане с банков превод или карта
+              <p className="text-center text-xs text-gray-600 flex items-center justify-center gap-2">
+                <ShieldCheck size={12} /> Плащане с карта · Stripe Secure Checkout
               </p>
             </motion.div>
           </motion.div>

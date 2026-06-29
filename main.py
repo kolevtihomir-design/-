@@ -69,7 +69,17 @@ async def startup():
     logger.info("Database initialized")
 
 
-# Routes (will be imported)
-# from routers import auth, search, negotiation, billing, kpi, export
+# Import routers
+from routers import auth, search, negotiation, billing, kpi, export, landed_cost, team
+
+# Register routers
+app.include_router(auth.router)
+app.include_router(search.router)
+app.include_router(negotiation.router)
+app.include_router(landed_cost.router)
+app.include_router(billing.router)
+app.include_router(kpi.router)
+app.include_router(export.router)
+app.include_router(team.router)
 
 logger.info(f"FastAPI app initialized: {settings.api_title} v{settings.api_version}")

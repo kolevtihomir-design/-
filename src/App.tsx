@@ -7,6 +7,7 @@ import {
   ShieldCheck, X, Loader2, MapPin, Clock,
   DollarSign, Settings, Plus, Pencil, Trash2, Save, Lock, RefreshCw,
   AlertTriangle, Calculator, Award,
+  // Award used in paywall coming-soon cards
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -27,23 +28,23 @@ const CATALOG: Product[] = [
   { id:6,  name: 'VFD Честотен инвертор 7.5kW 380V',       category: 'Електроника',   supplier: 'Inovance Technology',        factory_price: 320,   negotiated_price: 220,  discount_pct: 31, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 5,   weight_kg: 3.2, tags: 'vfd инвертор честотен 7.5kw честота двигател' },
   { id:7,  name: 'Заваръчен апарат MIG 350A 3-фазен',      category: 'Заваряване',    supplier: 'Jasic Welding Equipment',    factory_price: 890,   negotiated_price: 620,  discount_pct: 30, delivery_days: 8,  warehouse: 'Джуджоу, CN',  moq: 1,   weight_kg: 22,  tags: 'заваряване мig 350a сварка 3-фазен' },
   { id:8,  name: 'Електрически двигател IE3 11kW B3',       category: 'Двигатели',     supplier: 'NEMA Motors International', factory_price: 780,   negotiated_price: 540,  discount_pct: 31, delivery_days: 9,  warehouse: 'Тянджин, CN',  moq: 1,   weight_kg: 58,  tags: 'двигател електрически ie3 11kw асинхронен' },
-  { id:9,  name: 'PLC Контролер S7-1200 Compatible',        category: 'Автоматизация', supplier: 'Compatible Automation Ltd', factory_price: 280,   negotiated_price: 190,  discount_pct: 32, delivery_days: 6,  warehouse: 'Шенджен, CN',  moq: 3,   weight_kg: 0.8, tags: 'plc контролер автоматизация siemens s7 1200' },
+  { id:9,  name: 'PLC Контролер S7-1200 Compatible',        category: 'Автоматизация', supplier: 'Shenzhen Automation Systems', factory_price: 280,   negotiated_price: 190,  discount_pct: 32, delivery_days: 6,  warehouse: 'Шенджен, CN',  moq: 3,   weight_kg: 0.8, tags: 'plc контролер автоматизация siemens s7 1200' },
   { id:10, name: 'Термална камера -20/+550°C',              category: 'Измерване',     supplier: 'HikMicro Technology',       factory_price: 1800,  negotiated_price: 1250, discount_pct: 31, delivery_days: 10, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 0.5, tags: 'термална камера температура flir инфрачервена измерване' },
   { id:11, name: 'Пневматичен цилиндър 50x200mm 10бр',      category: 'Пневматика',    supplier: 'AirTAC International',      factory_price: 240,   negotiated_price: 165,  discount_pct: 31, delivery_days: 7,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 6,   tags: 'пневматика цилиндър пневматичен airtac 50x200' },
   { id:12, name: 'UPS Промишлен 6kVA Online',               category: 'Електроника',   supplier: 'Huawei Power Ltd',          factory_price: 1400,  negotiated_price: 975,  discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 35,  tags: 'ups промишлен непрекъснато 6kva online power' },
   { id:13, name: 'Хидравлично масло ISO VG 46, 200L',       category: 'Смазочни',      supplier: 'SinoPec Lubricants',        factory_price: 480,   negotiated_price: 330,  discount_pct: 31, delivery_days: 12, warehouse: 'Бейджин, CN',  moq: 1,   weight_kg: 185, tags: 'масло хидравлично iso vg46 200l смазка' },
   { id:14, name: 'Дебиломер DN50 Ултразвуков',              category: 'Измерване',     supplier: 'Sino Measurement Co.',      factory_price: 640,   negotiated_price: 440,  discount_pct: 31, delivery_days: 8,  warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 2.5, tags: 'дебиломер flowmeter dn50 ултразвуков digital измерване' },
   { id:15, name: 'Стоманена тръба 50x50x3mm 6m 100бр',      category: 'Метали',        supplier: 'Baosteel Group Corp',       factory_price: 18,    negotiated_price: 12,   discount_pct: 33, delivery_days: 14, warehouse: 'Шанхай, CN',   moq: 100, weight_kg: 26,  tags: 'тръба стоманена квадратна 50x50 метал конструкция' },
-  { id:16, name: 'Лагер 6205-2RS 100бр',                    category: 'Механика',      supplier: 'NSK Bearings Compatible',  factory_price: 180,   negotiated_price: 120,  discount_pct: 33, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 100, weight_kg: 4,   tags: 'лагер bearing 6205 2rs механика' },
+  { id:16, name: 'Лагер 6205-2RS 100бр',                    category: 'Механика',      supplier: 'NSK Bearings (OEM)',  factory_price: 180,   negotiated_price: 120,  discount_pct: 33, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 100, weight_kg: 4,   tags: 'лагер bearing 6205 2rs механика' },
   { id:17, name: 'Индустриален изсушител 80L/ден',           category: 'Климатизация',  supplier: 'Bry-Air Asia',              factory_price: 820,   negotiated_price: 570,  discount_pct: 30, delivery_days: 9,  warehouse: 'Гуанджоу, CN', moq: 1,   weight_kg: 28,  tags: 'изсушител dehumidifier климатизация промишлен 80l' },
-  { id:18, name: 'Промишлен вентилатор 3-фазен 0.75kW',      category: 'Климатизация',  supplier: 'Ziehl-Abegg Compatible',   factory_price: 380,   negotiated_price: 260,  discount_pct: 32, delivery_days: 7,  warehouse: 'Шанхай, CN',   moq: 2,   weight_kg: 8,   tags: 'вентилатор промишлен 3-фазен 0.75kw климатизация' },
+  { id:18, name: 'Промишлен вентилатор 3-фазен 0.75kW',      category: 'Климатизация',  supplier: 'Ziehl-Abegg (OEM Grade)',   factory_price: 380,   negotiated_price: 260,  discount_pct: 32, delivery_days: 7,  warehouse: 'Шанхай, CN',   moq: 2,   weight_kg: 8,   tags: 'вентилатор промишлен 3-фазен 0.75kw климатизация' },
   { id:19, name: 'Индустриален суич 24-порта',               category: 'Мрежи',         supplier: 'H3C Technologies Co.',      factory_price: 420,   negotiated_price: 290,  discount_pct: 31, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.8, tags: 'прекъсвач switch 24-порта мрежа lan индустриален' },
-  { id:20, name: 'Лентова шлайфмашина 150x1220mm',           category: 'Инструменти',   supplier: 'Metabo Compatible',         factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 7,  warehouse: 'Ченду, CN',    moq: 1,   weight_kg: 15,  tags: 'шлайфмашина лентова 150mm шлайф инструмент' },
+  { id:20, name: 'Лентова шлайфмашина 150x1220mm',           category: 'Инструменти',   supplier: 'Metabo (OEM Grade)',         factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 7,  warehouse: 'Ченду, CN',    moq: 1,   weight_kg: 15,  tags: 'шлайфмашина лентова 150mm шлайф инструмент' },
   { id:21, name: 'Предпазни ръкавици Cut-5 24 чифта',        category: 'ЛПС',           supplier: 'Ansell Healthcare',         factory_price: 120,   negotiated_price: 75,   discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 1.5, tags: 'ръкавици cut-5 предпазни лпс безопасност' },
   { id:22, name: 'Въглеродна стоманена плоча 4mm 1x2m',      category: 'Метали',        supplier: 'Ansteel Metal Group',       factory_price: 68,    negotiated_price: 47,   discount_pct: 31, delivery_days: 14, warehouse: 'Аншан, CN',    moq: 10,  weight_kg: 62,  tags: 'плоча стоманена въглеродна 4mm метал лист' },
   { id:23, name: 'Тръбни фитинги 304 SS 200бр',              category: 'Тръбопроводи',  supplier: 'YongGao Pipe Fittings',    factory_price: 380,   negotiated_price: 260,  discount_pct: 32, delivery_days: 8,  warehouse: 'Вензджоу, CN', moq: 1,   weight_kg: 12,  tags: 'фитинги тръба 304 ss неръждаема стомана тръбопровод' },
-  { id:24, name: 'Бояджийски пистолет HVLP 1.4mm',           category: 'Инструменти',   supplier: 'Devilbiss Compatible',      factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 0.9, tags: 'пистолет боядисване hvlp 1.4mm лакиране' },
-  { id:25, name: 'Power Quality Анализатор',                  category: 'Измерване',     supplier: 'Fluke Compatible',          factory_price: 1200,  negotiated_price: 835,  discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.5, tags: 'честотомер мрежа анализатор power quality fluke измерване' },
+  { id:24, name: 'Бояджийски пистолет HVLP 1.4mm',           category: 'Инструменти',   supplier: 'Devilbiss (OEM Grade)',      factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 0.9, tags: 'пистолет боядисване hvlp 1.4mm лакиране' },
+  { id:25, name: 'Power Quality Анализатор',                  category: 'Измерване',     supplier: 'Fluke (OEM Grade)',          factory_price: 1200,  negotiated_price: 835,  discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.5, tags: 'честотомер мрежа анализатор power quality fluke измерване' },
 ];
 
 const fmt = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
@@ -51,18 +52,6 @@ const fmtDec = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency'
 const DEMO_QUERIES = ['хидравлична помпа', 'компресор', 'led прожектор', 'заваръчен апарат', 'cnc рутер'];
 const CONTACT_EMAIL = 'kolev.tihomir@gmail.com';
 
-// Deterministic trust score per supplier name
-function trustScore(supplier: string): number {
-  let h = 0;
-  for (let i = 0; i < supplier.length; i++) h = (h * 31 + supplier.charCodeAt(i)) & 0xffff;
-  return 72 + (h % 26); // 72–97
-}
-
-function riskLevel(warehouse: string): { label: string; color: string } {
-  if (warehouse.includes('CN')) return { label: '12% риск забавяне', color: 'text-yellow-400' };
-  if (warehouse.includes('DE') || warehouse.includes('PL')) return { label: '4% риск забавяне', color: 'text-green-400' };
-  return { label: '8% риск забавяне', color: 'text-orange-400' };
-}
 
 export default function App() {
   const [view, setView] = useState<'search' | 'result' | 'catalog'>('search');
@@ -168,9 +157,9 @@ export default function App() {
 
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
               className="text-gray-400 text-lg mb-12 max-w-2xl mx-auto leading-relaxed">
-              AI агент преговаря директно с доставчика. Средно{' '}
+              Директен достъп до производителя — без прекупвачи. Средно{' '}
               <span className="text-white font-bold">31% под пазарна цена</span>.
-              DHL логистика. Ценов одит. 25 B2B продукта.
+              Landed Cost калкулатор. DHL логистика. Ценов одит.
             </motion.p>
 
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
@@ -202,7 +191,7 @@ export default function App() {
 
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
               className="grid grid-cols-3 gap-6 max-w-lg mx-auto">
-              {[['842+', 'B2B търсения'], ['31%', 'средна отстъпка'], ['145к EUR', 'спестено']].map(([val, label]) => (
+              {[['20,000+', 'B2B продукта'], ['30–38%', 'средна отстъпка FOB'], ['CN → BG', 'директна доставка']].map(([val, label]) => (
                 <div key={label} className="text-center">
                   <div className="text-2xl font-black text-white mb-1">{val}</div>
                   <div className="text-xs text-gray-500 font-medium">{label}</div>
@@ -334,39 +323,22 @@ export default function App() {
               );
             })()}
 
-            {/* Trust Score + Risk */}
-            {demoResult && (
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-white/3 border border-white/10 rounded-2xl p-4">
+            {/* Coming soon modules */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {[
+                { icon: Award, label: 'Trust Score (0–100)', sub: 'Верификация на доставчик · ISO/CE сертификати · рекламации', color: 'text-yellow-400' },
+                { icon: AlertTriangle, label: 'AI Риск Анализ', sub: 'Пристанищни забавяния · санкции · митнически ограничения', color: 'text-orange-400' },
+              ].map(({ icon: Icon, label, sub, color }) => (
+                <div key={label} className="bg-white/3 border border-white/10 rounded-2xl p-4 relative overflow-hidden">
+                  <div className="absolute top-2 right-2 text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">Про план</div>
                   <div className="flex items-center gap-2 mb-3">
-                    <Award size={14} className="text-yellow-400" />
-                    <span className="text-xs font-bold text-gray-400">TRUST SCORE</span>
+                    <Icon size={14} className={color} />
+                    <span className={`text-xs font-bold ${color}`}>{label}</span>
                   </div>
-                  <div className="flex items-end gap-2 mb-2">
-                    <span className="text-3xl font-black text-yellow-400">{trustScore(demoResult.supplier)}</span>
-                    <span className="text-gray-500 text-sm mb-1">/100</span>
-                  </div>
-                  <div className="w-full bg-white/5 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-yellow-500 to-green-400 h-2 rounded-full transition-all"
-                      style={{ width: `${trustScore(demoResult.supplier)}%` }} />
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2">{demoResult.supplier}</div>
+                  <div className="text-xs text-gray-500">{sub}</div>
                 </div>
-                <div className="bg-white/3 border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle size={14} className="text-orange-400" />
-                    <span className="text-xs font-bold text-gray-400">РИСК АНАЛИЗ</span>
-                  </div>
-                  <div className={`text-2xl font-black mb-1 ${riskLevel(demoResult.warehouse).color}`}>
-                    {riskLevel(demoResult.warehouse).label.split(' ')[0]}
-                  </div>
-                  <div className={`text-xs font-semibold ${riskLevel(demoResult.warehouse).color}`}>
-                    {riskLevel(demoResult.warehouse).label}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2">митнически + логистични фактори</div>
-                </div>
-              </div>
-            )}
+              ))}
+            </div>
 
             <div className="grid grid-cols-3 gap-4 mb-8 opacity-50">
               {[
@@ -420,12 +392,7 @@ export default function App() {
                     <span className="text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">-{p.discount_pct}%</span>
                   </div>
                   <h3 className="font-semibold text-sm mb-2 leading-snug">{p.name}</h3>
-                  <p className="text-xs text-gray-500 mb-1">{p.supplier}</p>
-                  <div className="flex items-center gap-1 mb-3">
-                    <Award size={10} className="text-yellow-400" />
-                    <span className="text-[10px] text-yellow-400 font-bold">{trustScore(p.supplier)}/100</span>
-                    <span className={`text-[10px] ml-2 ${riskLevel(p.warehouse).color}`}>· {riskLevel(p.warehouse).label}</span>
-                  </div>
+                  <p className="text-xs text-gray-500 mb-3">{p.supplier}</p>
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-black text-lg">{fmt(p.negotiated_price)}</div>

@@ -160,39 +160,7 @@ async function getDHLLogistics(product: string, weightKg: number) {
     }
   }
 
-  // ── Option 2: ShippingRates.org (completely free, no key, 25 req/month) ──
-  try {
-    const res = await fetch('https://shippingrates.org/api/transit-times', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        origin: { country: 'CN', port: 'CNSZX' },
-        destination: { country: 'BG', port: 'BGVAA' },
-        weight_kg: weightKg,
-        mode: 'air',
-      }),
-      signal: AbortSignal.timeout(1500),
-    });
-
-    if (res.ok) {
-      const data = await res.json() as any;
-      const result2 = {
-        source: 'ShippingRates.org (Free)',
-        route: 'Шенджен, CN → Варна/София, BG',
-        service: data.service || 'Air Freight Express',
-        delivery_days: data.transit_days || data.days || 6,
-        cost_eur: data.estimated_cost_eur || Math.round(weightKg * 4.5 + 30),
-        currency: 'EUR',
-        warehouse: 'Шенджен, CN',
-      };
-      dbCacheSet(cacheKey, result2, 60 * 60 * 1000);
-      return result2;
-    }
-  } catch (e: any) {
-    console.log('ShippingRates.org unavailable, using weight model:', e.message);
-  }
-
-  // ── Fallback: weight-based market model ──────────────────
+  // ── Fallback: weight-based market model (DHL published rates CN→BG) ─
   const baseCost = weightKg < 5 ? 35 : weightKg < 30 ? 65 : weightKg < 100 ? 120 : 280;
   const days = weightKg < 30 ? 5 : weightKg < 200 ? 8 : 14;
   return {
@@ -509,9 +477,17 @@ async function startServer() {
   });
 
   // ── STRIPE CHECKOUT ──────────────────────────────────
+  const PLANS: Record<string, { amount: number; name: string; desc: string }> = {
+    trial:   { amount: 99,   name: 'AI-Покупки Пробен — 0.99 EUR', desc: '1 пълно B2B търсене с AI анализ' },
+    starter: { amount: 990,  name: 'AI-Покупки Стартер — 9.90 EUR/мес', desc: '50 B2B търсения/месец, Landed Cost, Trust Score' },
+    pro:     { amount: 4900, name: 'AI-Покупки Про — 49 EUR/мес', desc: 'Неограничени търсения, AI препоръки, ценов одит, DHL логистика' },
+    business:{ amount: 14900,name: 'AI-Покупки Business — 149 EUR/мес', desc: 'Multi-user, ERP export, AI договори, приоритетна поддръжка' },
+  };
+
   app.post('/api/checkout', async (req, res) => {
-    const { email } = req.body;
+    const { email, plan = 'starter' } = req.body;
     const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+    const planCfg = PLANS[plan] || PLANS.starter;
 
     try {
       const session = await stripe.checkout.sessions.create({
@@ -519,20 +495,17 @@ async function startServer() {
         line_items: [{
           price_data: {
             currency: 'eur',
-            product_data: {
-              name: 'AI-Pokupki Стартер — 1 месец',
-              description: '50 B2B търсения/месец, AI препоръки, DHL логистика, ценов одит',
-              images: [],
-            },
-            unit_amount: 990, // 9.90 EUR in cents
+            product_data: { name: planCfg.name, description: planCfg.desc },
+            unit_amount: planCfg.amount,
+            ...(plan !== 'trial' ? { recurring: { interval: 'month' } } : {}),
           },
           quantity: 1,
         }],
-        mode: 'payment',
+        mode: plan === 'trial' ? 'payment' : 'subscription',
         customer_email: email || undefined,
         success_url: `${APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${APP_URL}/?cancelled=true`,
-        metadata: { product: 'ai-pokupki-monthly' },
+        metadata: { plan },
       });
 
       res.json({ success: true, url: session.url, session_id: session.id });
@@ -541,9 +514,7 @@ async function startServer() {
       if (process.env.NODE_ENV === 'production') {
         return res.status(500).json({ error: 'Payment service unavailable', message: e.message });
       }
-      // Dev mode only — grant access directly without payment
       const testToken = signAccessToken('dev_' + Date.now());
-      bumpAnalytics('paid_searches');
       res.json({ success: true, test_token: testToken, test_mode: true });
     }
   });
@@ -673,10 +644,10 @@ async function startServer() {
     console.log(`\n🚀 AI-Pokupki B2B Platform — port ${PORT} [${isProd ? 'Production' : 'Development'}]`);
     console.log(`   SQLite DB: data/pokupki.db`);
     console.log(`   MiniSearch: ${(db.prepare('SELECT COUNT(*) as n FROM products WHERE active=1').get() as any).n} products indexed`);
-    console.log(`   DHL API: ${process.env.DHL_API_KEY ? 'configured' : 'fallback mode'}`);
-    console.log(`   Keepa API: ${process.env.KEEPA_API_KEY ? 'configured' : 'fallback mode'}`);
+    console.log(`   Easyship: ${process.env.EASYSHIP_API_KEY ? 'configured' : 'weight-model fallback'}`);
+    console.log(`   SerpAPI:  ${process.env.SERPAPI_KEY ? 'configured' : 'market-model fallback'}`);
     console.log(`   HuggingFace: ${process.env.HF_API_TOKEN ? 'configured' : 'TF-IDF mode'}`);
-    console.log(`   Stripe: ${process.env.STRIPE_SECRET_KEY ? 'live' : 'test mode'}\n`);
+    console.log(`   Stripe: ${process.env.STRIPE_SECRET_KEY?.startsWith('sk_live') ? 'LIVE' : process.env.STRIPE_SECRET_KEY ? 'test' : 'missing'}\n`);
   });
 }
 

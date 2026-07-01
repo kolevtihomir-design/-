@@ -67,7 +67,7 @@ db.exec(`
   );
 
   INSERT OR IGNORE INTO analytics (id, total_searches, paid_searches, total_savings_eur, total_orders)
-  VALUES (1, 842, 623, 145320, 287);
+  VALUES (1, 0, 0, 0, 0);
 `);
 
 // ── Products helpers ──────────────────────────────────────────

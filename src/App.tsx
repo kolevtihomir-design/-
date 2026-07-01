@@ -6,6 +6,7 @@ import {
   CheckCircle, ArrowRight, Star, Package, Globe,
   ShieldCheck, X, Loader2, MapPin, Clock,
   DollarSign, Settings, Plus, Pencil, Trash2, Save, Lock, RefreshCw,
+  AlertTriangle, Calculator, Award,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -46,8 +47,22 @@ const CATALOG: Product[] = [
 ];
 
 const fmt = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+const fmtDec = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const DEMO_QUERIES = ['хидравлична помпа', 'компресор', 'led прожектор', 'заваръчен апарат', 'cnc рутер'];
 const CONTACT_EMAIL = 'kolev.tihomir@gmail.com';
+
+// Deterministic trust score per supplier name
+function trustScore(supplier: string): number {
+  let h = 0;
+  for (let i = 0; i < supplier.length; i++) h = (h * 31 + supplier.charCodeAt(i)) & 0xffff;
+  return 72 + (h % 26); // 72–97
+}
+
+function riskLevel(warehouse: string): { label: string; color: string } {
+  if (warehouse.includes('CN')) return { label: '12% риск забавяне', color: 'text-yellow-400' };
+  if (warehouse.includes('DE') || warehouse.includes('PL')) return { label: '4% риск забавяне', color: 'text-green-400' };
+  return { label: '8% риск забавяне', color: 'text-orange-400' };
+}
 
 export default function App() {
   const [view, setView] = useState<'search' | 'result' | 'catalog'>('search');
@@ -58,6 +73,8 @@ export default function App() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [catalogQuery, setCatalogQuery] = useState('');
+  const [lcQty, setLcQty] = useState(10);
+  const [lcMargin, setLcMargin] = useState(30);
 
   // Build MiniSearch index in browser
   const engine = useMemo(() => {
@@ -255,6 +272,102 @@ export default function App() {
               </div>
             </div>
 
+            {/* Landed Cost Calculator */}
+            {demoResult && (() => {
+              const transport = Math.round(demoResult.weight_kg * 1.8 * lcQty);
+              const duties = Math.round(demoResult.negotiated_price * lcQty * 0.034);
+              const insurance = Math.round(demoResult.negotiated_price * lcQty * 0.008);
+              const totalCost = demoResult.negotiated_price * lcQty + transport + duties + insurance;
+              const sellPrice = totalCost / lcQty * (1 + lcMargin / 100);
+              const profit = (sellPrice - totalCost / lcQty) * lcQty;
+              return (
+                <div className="bg-white/3 border border-white/10 rounded-3xl p-6 mb-6">
+                  <div className="flex items-center gap-2 mb-5">
+                    <Calculator size={16} className="text-blue-400" />
+                    <span className="text-sm font-bold text-blue-400">LANDED COST КАЛКУЛАТОР</span>
+                    <span className="text-xs text-gray-500 ml-auto">включва транспорт · мита · застраховка</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-400 mb-2">
+                        <span>Количество</span><span className="font-bold text-white">{lcQty} бр.</span>
+                      </div>
+                      <input type="range" min={1} max={200} value={lcQty} onChange={e => setLcQty(+e.target.value)}
+                        className="w-full accent-blue-500 cursor-pointer" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-400 mb-2">
+                        <span>Твой марж</span><span className="font-bold text-white">{lcMargin}%</span>
+                      </div>
+                      <input type="range" min={10} max={80} value={lcMargin} onChange={e => setLcMargin(+e.target.value)}
+                        className="w-full accent-purple-500 cursor-pointer" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                    {[
+                      ['Продуктова цена', fmt(demoResult.negotiated_price * lcQty)],
+                      ['DHL транспорт', fmt(transport)],
+                      ['Мита (3.4%)', fmt(duties)],
+                      ['Застраховка (0.8%)', fmt(insurance)],
+                    ].map(([label, val]) => (
+                      <div key={label} className="flex justify-between bg-white/3 rounded-xl px-3 py-2">
+                        <span className="text-gray-500">{label}</span>
+                        <span className="font-semibold">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-2xl p-4">
+                    <div className="text-center">
+                      <div className="text-lg font-black">{fmtDec(totalCost / lcQty)}</div>
+                      <div className="text-xs text-gray-500">landed cost / бр.</div>
+                    </div>
+                    <div className="text-center border-l border-r border-white/10">
+                      <div className="text-lg font-black text-purple-400">{fmtDec(sellPrice)}</div>
+                      <div className="text-xs text-gray-500">продажна / бр.</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-black text-green-400">{fmt(profit)}</div>
+                      <div className="text-xs text-gray-500">чиста печалба</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Trust Score + Risk */}
+            {demoResult && (
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-white/3 border border-white/10 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Award size={14} className="text-yellow-400" />
+                    <span className="text-xs font-bold text-gray-400">TRUST SCORE</span>
+                  </div>
+                  <div className="flex items-end gap-2 mb-2">
+                    <span className="text-3xl font-black text-yellow-400">{trustScore(demoResult.supplier)}</span>
+                    <span className="text-gray-500 text-sm mb-1">/100</span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-2">
+                    <div className="bg-gradient-to-r from-yellow-500 to-green-400 h-2 rounded-full transition-all"
+                      style={{ width: `${trustScore(demoResult.supplier)}%` }} />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">{demoResult.supplier}</div>
+                </div>
+                <div className="bg-white/3 border border-white/10 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle size={14} className="text-orange-400" />
+                    <span className="text-xs font-bold text-gray-400">РИСК АНАЛИЗ</span>
+                  </div>
+                  <div className={`text-2xl font-black mb-1 ${riskLevel(demoResult.warehouse).color}`}>
+                    {riskLevel(demoResult.warehouse).label.split(' ')[0]}
+                  </div>
+                  <div className={`text-xs font-semibold ${riskLevel(demoResult.warehouse).color}`}>
+                    {riskLevel(demoResult.warehouse).label}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">митнически + логистични фактори</div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-4 mb-8 opacity-50">
               {[
                 { icon: Truck, label: 'DHL Логистика', sub: 'Шенджен → България' },
@@ -307,7 +420,12 @@ export default function App() {
                     <span className="text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">-{p.discount_pct}%</span>
                   </div>
                   <h3 className="font-semibold text-sm mb-2 leading-snug">{p.name}</h3>
-                  <p className="text-xs text-gray-500 mb-3">{p.supplier}</p>
+                  <p className="text-xs text-gray-500 mb-1">{p.supplier}</p>
+                  <div className="flex items-center gap-1 mb-3">
+                    <Award size={10} className="text-yellow-400" />
+                    <span className="text-[10px] text-yellow-400 font-bold">{trustScore(p.supplier)}/100</span>
+                    <span className={`text-[10px] ml-2 ${riskLevel(p.warehouse).color}`}>· {riskLevel(p.warehouse).label}</span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-black text-lg">{fmt(p.negotiated_price)}</div>
@@ -359,28 +477,32 @@ export default function App() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-3 gap-2 mb-5">
                 {[
-                  { name: 'Стартер', price: '9.90', desc: '50 търсения/месец' },
-                  { name: 'Про', price: '49', desc: 'Неограничени + AI', highlight: true },
+                  { name: 'Стартер', price: '9.90', desc: '50 търсения', features: ['Landed Cost', 'Trust Score'] },
+                  { name: 'Про', price: '49', desc: 'Неограничени', features: ['+ AI OCR', '+ Risk AI'], highlight: true },
+                  { name: 'Business', price: '149', desc: 'Multi-user', features: ['+ ERP Export', '+ Договори AI'] },
                 ].map(plan => (
                   <div key={plan.name}
-                    className={`p-4 rounded-2xl border text-left ${plan.highlight ? 'border-blue-500/60 bg-blue-500/10' : 'border-white/10 bg-white/3'}`}>
-                    <div className={`text-xs font-bold mb-1 ${plan.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{plan.name}</div>
-                    <div className="text-xl font-black">{plan.price} <span className="text-sm font-normal text-gray-400">EUR/мес.</span></div>
-                    <div className="text-xs text-gray-500 mt-1">{plan.desc}</div>
+                    className={`p-3 rounded-2xl border text-left ${plan.highlight ? 'border-blue-500/60 bg-blue-500/10' : 'border-white/10 bg-white/3'}`}>
+                    <div className={`text-[11px] font-bold mb-1 ${plan.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{plan.name}</div>
+                    <div className="text-lg font-black">{plan.price} <span className="text-[10px] font-normal text-gray-400">€/мес</span></div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{plan.desc}</div>
+                    {plan.features.map(f => (
+                      <div key={f} className="text-[10px] text-gray-600 mt-0.5">{f}</div>
+                    ))}
                   </div>
                 ))}
               </div>
 
               <a href={`mailto:${CONTACT_EMAIL}?subject=AI-Покупки достъп&body=Здравейте, искам достъп до AI-Покупки платформата.`}
                 className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30">
-                Поръчай достъп — {CONTACT_EMAIL}
+                Поръчай достъп
                 <ArrowRight size={20} />
               </a>
 
               <p className="text-center text-xs text-gray-600 mt-3 flex items-center justify-center gap-2">
-                <ShieldCheck size={12} /> Отговор до 24 часа · Плащане с банков превод или карта
+                <ShieldCheck size={12} /> Отговор до 24ч · Банков превод или карта · {CONTACT_EMAIL}
               </p>
             </motion.div>
           </motion.div>

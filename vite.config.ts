@@ -10,7 +10,7 @@ export default defineConfig(({mode}) => {
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
-    base: process.env.NODE_ENV === 'production' ? '/-/' : '/',
+    base: '/',
     resolve: {
       alias: {
         '@': path.resolve(process.cwd(), '.'),

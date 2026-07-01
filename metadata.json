@@ -1,0 +1,6 @@
+{
+  "name": "ProcureOS",
+  "description": "B2B AI Operating System for Sourcing and Conversion Optimization",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

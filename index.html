@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ProcureOS" />
+    <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=192&h=192&q=80" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>ProcureOS - B2B AI Sourcing OS</title>
+    <script type="text/javascript">
+      window.googleTranslateElementInit = function() {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'bg,en,de,fr,es,it,ro,tr,el,sr,mk,hr,hu,pl',
+          layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+          autoDisplay: true
+        }, 'google_translate_element');
+      }
+    </script>
+    <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+    <style>
+      /* Hide the annoying google translate frame borders and banners */
+      .goog-logo-link {
+        display: none !important;
+      }
+      .goog-te-gadget {
+        font-family: inherit !important;
+        font-size: 11px !important;
+        color: #94a3b8 !important;
+      }
+      .goog-te-gadget .goog-te-combo {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+        border: 1px solid #cbd5e1 !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+        outline: none !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+      }
+      iframe.goog-te-banner-frame {
+        display: none !important;
+      }
+      body {
+        top: 0px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('Service Worker registered successfully:', reg.scope))
+            .catch((err) => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
+  </body>
+</html>

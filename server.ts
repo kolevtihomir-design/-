@@ -464,6 +464,12 @@ async function startServer() {
     res.json({ success: true, ...result });
   });
 
+  // ── CATALOG (public, paginated) ──────────────────────
+  app.get('/api/catalog', (_req, res) => {
+    const products = getAllProducts();
+    res.json({ success: true, products, total: (products as any[]).length });
+  });
+
   // ── ANALYTICS ────────────────────────────────────────
   app.get('/api/analytics', (_req, res) => {
     const a = getAnalytics();

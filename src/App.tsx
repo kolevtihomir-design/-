@@ -1,13 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import MiniSearch from 'minisearch';
 import {
   Search, TrendingDown, Truck, BarChart3, Brain, Zap,
-  CheckCircle, ArrowRight, Star, Package, Globe,
-  ShieldCheck, X, Loader2, MapPin, Clock,
-  DollarSign, Settings, Plus, Pencil, Trash2, Save, Lock, RefreshCw,
-  AlertTriangle, Calculator, Award,
-  // Award used in paywall coming-soon cards
+  ArrowRight, Package, Globe, ShieldCheck, X, Loader2,
+  MapPin, Clock, Calculator, AlertTriangle, Award,
+  LogOut, User, ChevronDown,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -18,96 +15,164 @@ interface Product {
   tags: string;
 }
 
-// ─── Embedded Catalog ────────────────────────────────────────
-const CATALOG: Product[] = [
-  { id:1,  name: 'Хидравлична помпа 380V 15kW',          category: 'Машини',        supplier: 'Guangzhou Industrial Co.',   factory_price: 2400,  negotiated_price: 1680, discount_pct: 30, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 38,  tags: 'помпа хидравлика машини 380v индустриален' },
-  { id:2,  name: 'CNC Рутер 3-осен 1300x2500mm',          category: 'Машини',        supplier: 'Jinan CNC Factory',          factory_price: 8500,  negotiated_price: 5950, discount_pct: 30, delivery_days: 14, warehouse: 'Джинан, CN',   moq: 1,   weight_kg: 850, tags: 'cnc рутер фреза дърводелство 1325' },
-  { id:3,  name: 'Индустриален компресор 7.5kW 300L',      category: 'Компресори',    supplier: 'Shanghai Compressor Ltd',    factory_price: 1200,  negotiated_price: 840,  discount_pct: 30, delivery_days: 10, warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 120, tags: 'компресор въздух индустриален 7.5kw 300l' },
-  { id:4,  name: 'Електрическа количка 2T',                category: 'Транспорт',     supplier: 'Hangzhou Forklift Co.',      factory_price: 12000, negotiated_price: 8400, discount_pct: 30, delivery_days: 21, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 3200,tags: 'количка електрическа 2т склад' },
-  { id:5,  name: 'LED Прожектор Highbay 200W IP65',        category: 'Осветление',    supplier: 'Shenzhen LED Corp',          factory_price: 45,    negotiated_price: 28,   discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 50,  weight_kg: 2.8, tags: 'led highbay прожектор 200w склад цех осветление' },
-  { id:6,  name: 'VFD Честотен инвертор 7.5kW 380V',       category: 'Електроника',   supplier: 'Inovance Technology',        factory_price: 320,   negotiated_price: 220,  discount_pct: 31, delivery_days: 7,  warehouse: 'Шенджен, CN',  moq: 5,   weight_kg: 3.2, tags: 'vfd инвертор честотен 7.5kw честота двигател' },
-  { id:7,  name: 'Заваръчен апарат MIG 350A 3-фазен',      category: 'Заваряване',    supplier: 'Jasic Welding Equipment',    factory_price: 890,   negotiated_price: 620,  discount_pct: 30, delivery_days: 8,  warehouse: 'Джуджоу, CN',  moq: 1,   weight_kg: 22,  tags: 'заваряване мig 350a сварка 3-фазен' },
-  { id:8,  name: 'Електрически двигател IE3 11kW B3',       category: 'Двигатели',     supplier: 'NEMA Motors International', factory_price: 780,   negotiated_price: 540,  discount_pct: 31, delivery_days: 9,  warehouse: 'Тянджин, CN',  moq: 1,   weight_kg: 58,  tags: 'двигател електрически ie3 11kw асинхронен' },
-  { id:9,  name: 'PLC Контролер S7-1200 Compatible',        category: 'Автоматизация', supplier: 'Shenzhen Automation Systems', factory_price: 280,   negotiated_price: 190,  discount_pct: 32, delivery_days: 6,  warehouse: 'Шенджен, CN',  moq: 3,   weight_kg: 0.8, tags: 'plc контролер автоматизация siemens s7 1200' },
-  { id:10, name: 'Термална камера -20/+550°C',              category: 'Измерване',     supplier: 'HikMicro Technology',       factory_price: 1800,  negotiated_price: 1250, discount_pct: 31, delivery_days: 10, warehouse: 'Ханджоу, CN',  moq: 1,   weight_kg: 0.5, tags: 'термална камера температура flir инфрачервена измерване' },
-  { id:11, name: 'Пневматичен цилиндър 50x200mm 10бр',      category: 'Пневматика',    supplier: 'AirTAC International',      factory_price: 240,   negotiated_price: 165,  discount_pct: 31, delivery_days: 7,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 6,   tags: 'пневматика цилиндър пневматичен airtac 50x200' },
-  { id:12, name: 'UPS Промишлен 6kVA Online',               category: 'Електроника',   supplier: 'Huawei Power Ltd',          factory_price: 1400,  negotiated_price: 975,  discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 35,  tags: 'ups промишлен непрекъснато 6kva online power' },
-  { id:13, name: 'Хидравлично масло ISO VG 46, 200L',       category: 'Смазочни',      supplier: 'SinoPec Lubricants',        factory_price: 480,   negotiated_price: 330,  discount_pct: 31, delivery_days: 12, warehouse: 'Бейджин, CN',  moq: 1,   weight_kg: 185, tags: 'масло хидравлично iso vg46 200l смазка' },
-  { id:14, name: 'Дебиломер DN50 Ултразвуков',              category: 'Измерване',     supplier: 'Sino Measurement Co.',      factory_price: 640,   negotiated_price: 440,  discount_pct: 31, delivery_days: 8,  warehouse: 'Шанхай, CN',   moq: 1,   weight_kg: 2.5, tags: 'дебиломер flowmeter dn50 ултразвуков digital измерване' },
-  { id:15, name: 'Стоманена тръба 50x50x3mm 6m 100бр',      category: 'Метали',        supplier: 'Baosteel Group Corp',       factory_price: 18,    negotiated_price: 12,   discount_pct: 33, delivery_days: 14, warehouse: 'Шанхай, CN',   moq: 100, weight_kg: 26,  tags: 'тръба стоманена квадратна 50x50 метал конструкция' },
-  { id:16, name: 'Лагер 6205-2RS 100бр',                    category: 'Механика',      supplier: 'NSK Bearings (OEM)',  factory_price: 180,   negotiated_price: 120,  discount_pct: 33, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 100, weight_kg: 4,   tags: 'лагер bearing 6205 2rs механика' },
-  { id:17, name: 'Индустриален изсушител 80L/ден',           category: 'Климатизация',  supplier: 'Bry-Air Asia',              factory_price: 820,   negotiated_price: 570,  discount_pct: 30, delivery_days: 9,  warehouse: 'Гуанджоу, CN', moq: 1,   weight_kg: 28,  tags: 'изсушител dehumidifier климатизация промишлен 80l' },
-  { id:18, name: 'Промишлен вентилатор 3-фазен 0.75kW',      category: 'Климатизация',  supplier: 'Ziehl-Abegg (OEM Grade)',   factory_price: 380,   negotiated_price: 260,  discount_pct: 32, delivery_days: 7,  warehouse: 'Шанхай, CN',   moq: 2,   weight_kg: 8,   tags: 'вентилатор промишлен 3-фазен 0.75kw климатизация' },
-  { id:19, name: 'Индустриален суич 24-порта',               category: 'Мрежи',         supplier: 'H3C Technologies Co.',      factory_price: 420,   negotiated_price: 290,  discount_pct: 31, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.8, tags: 'прекъсвач switch 24-порта мрежа lan индустриален' },
-  { id:20, name: 'Лентова шлайфмашина 150x1220mm',           category: 'Инструменти',   supplier: 'Metabo (OEM Grade)',         factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 7,  warehouse: 'Ченду, CN',    moq: 1,   weight_kg: 15,  tags: 'шлайфмашина лентова 150mm шлайф инструмент' },
-  { id:21, name: 'Предпазни ръкавици Cut-5 24 чифта',        category: 'ЛПС',           supplier: 'Ansell Healthcare',         factory_price: 120,   negotiated_price: 75,   discount_pct: 38, delivery_days: 5,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 1.5, tags: 'ръкавици cut-5 предпазни лпс безопасност' },
-  { id:22, name: 'Въглеродна стоманена плоча 4mm 1x2m',      category: 'Метали',        supplier: 'Ansteel Metal Group',       factory_price: 68,    negotiated_price: 47,   discount_pct: 31, delivery_days: 14, warehouse: 'Аншан, CN',    moq: 10,  weight_kg: 62,  tags: 'плоча стоманена въглеродна 4mm метал лист' },
-  { id:23, name: 'Тръбни фитинги 304 SS 200бр',              category: 'Тръбопроводи',  supplier: 'YongGao Pipe Fittings',    factory_price: 380,   negotiated_price: 260,  discount_pct: 32, delivery_days: 8,  warehouse: 'Вензджоу, CN', moq: 1,   weight_kg: 12,  tags: 'фитинги тръба 304 ss неръждаема стомана тръбопровод' },
-  { id:24, name: 'Бояджийски пистолет HVLP 1.4mm',           category: 'Инструменти',   supplier: 'Devilbiss (OEM Grade)',      factory_price: 560,   negotiated_price: 385,  discount_pct: 31, delivery_days: 6,  warehouse: 'Нинго, CN',    moq: 1,   weight_kg: 0.9, tags: 'пистолет боядисване hvlp 1.4mm лакиране' },
-  { id:25, name: 'Power Quality Анализатор',                  category: 'Измерване',     supplier: 'Fluke (OEM Grade)',          factory_price: 1200,  negotiated_price: 835,  discount_pct: 30, delivery_days: 8,  warehouse: 'Шенджен, CN',  moq: 1,   weight_kg: 2.5, tags: 'честотомер мрежа анализатор power quality fluke измерване' },
-];
+interface AuthUser {
+  id: number; email: string; plan: string;
+  actions_used: number; actions_limit: number;
+}
 
+// ─── Config ──────────────────────────────────────────────────
+const API = ''; // relative — Vercel proxies /api/* to Cloud Run
 const fmt = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 const fmtDec = (n: number) => new Intl.NumberFormat('bg-BG', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const DEMO_QUERIES = ['хидравлична помпа', 'компресор', 'led прожектор', 'заваръчен апарат', 'cnc рутер'];
-const CONTACT_EMAIL = 'kolev.tihomir@gmail.com';
 
+// ─── API helpers ──────────────────────────────────────────────
+async function apiPost(path: string, body: object) {
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
 
+async function apiGet(path: string, token?: string) {
+  const res = await fetch(`${API}${path}`, {
+    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+  });
+  return res.json();
+}
+
+// ─── App ─────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState<'search' | 'result' | 'catalog'>('search');
+  const [view, setView] = useState<'search' | 'result' | 'catalog' | 'auth'>('search');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'confirm'>('login');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [demoResult, setDemoResult] = useState<Product | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [catalog, setCatalog] = useState<Product[]>([]);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [lcQty, setLcQty] = useState(10);
   const [lcMargin, setLcMargin] = useState(30);
+  const [error, setError] = useState('');
 
-  // Build MiniSearch index in browser
-  const engine = useMemo(() => {
-    const ms = new MiniSearch({
-      fields: ['name', 'category', 'supplier', 'tags'],
-      storeFields: ['id','name','category','supplier','factory_price','negotiated_price','discount_pct','delivery_days','warehouse','moq','weight_kg'],
-      searchOptions: { boost: { name: 3, tags: 2.5, category: 1.5 }, fuzzy: 0.25, prefix: true },
-    });
-    ms.addAll(CATALOG);
-    return ms;
-  }, []);
+  // Auth state
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [token, setToken] = useState(() => localStorage.getItem('jwt') || '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmCode, setConfirmCode] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
 
+  // Load user on mount
+  useEffect(() => {
+    if (!token) return;
+    apiGet('/api/auth/me', token).then(d => {
+      if (d.user) setUser(d.user);
+      else { localStorage.removeItem('jwt'); setToken(''); }
+    }).catch(() => {});
+  }, [token]);
+
+  // Rotating placeholder
   useEffect(() => {
     const t = setInterval(() => setPlaceholderIdx(i => (i + 1) % DEMO_QUERIES.length), 3000);
     return () => clearInterval(t);
   }, []);
 
-  const handleDemoSearch = useCallback((q?: string) => {
-    const sq = q || query;
-    if (!sq.trim()) return;
-    setLoading(true);
-    setTimeout(() => {
-      const results = engine.search(sq);
-      const product = results.length > 0
-        ? CATALOG.find(p => p.id === (results[0] as any).id) || CATALOG[0]
-        : CATALOG[0];
-      setDemoResult(product);
-      setView('result');
-      setLoading(false);
-      setTimeout(() => setShowPaywall(true), 2500);
-    }, 800);
-  }, [query, engine]);
+  // Load catalog
+  useEffect(() => {
+    if (view !== 'catalog') return;
+    apiGet('/api/catalog').then(d => { if (d.products) setCatalog(d.products); });
+  }, [view]);
 
-  const handleCatalogSearch = (q: string) => {
-    setCatalogQuery(q);
-    if (!q.trim()) { setSearchResults([]); return; }
-    const results = engine.search(q);
-    setSearchResults(results.map(r => CATALOG.find(p => p.id === (r as any).id)!).filter(Boolean));
+  // ── Search ────────────────────────────────────────────────
+  const handleDemoSearch = useCallback(async (q?: string) => {
+    const sq = (q || query).trim();
+    if (!sq) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await apiPost('/api/search/demo', { query: sq });
+      if (data.product) {
+        setDemoResult(data.product);
+        setView('result');
+        setTimeout(() => setShowPaywall(true), 2500);
+      } else {
+        setError(data.error || 'Няма резултати');
+      }
+    } catch {
+      setError('Сървърът не отговаря. Проверете връзката.');
+    } finally {
+      setLoading(false);
+    }
+  }, [query]);
+
+  // ── Auth ──────────────────────────────────────────────────
+  const handleRegister = async () => {
+    setAuthLoading(true); setError('');
+    const d = await apiPost('/api/auth/register', { email, password });
+    setAuthLoading(false);
+    if (d.success) { setAuthMode('confirm'); }
+    else setError(d.error || 'Грешка при регистрация');
   };
 
-  const displayed = catalogQuery.trim() ? searchResults : CATALOG;
+  const handleConfirm = async () => {
+    setAuthLoading(true); setError('');
+    const d = await apiPost('/api/auth/confirm', { email, code: confirmCode });
+    setAuthLoading(false);
+    if (d.token) {
+      localStorage.setItem('jwt', d.token);
+      setToken(d.token);
+      setUser(d.user);
+      setView('search');
+    } else setError(d.error || 'Невалиден код');
+  };
+
+  const handleLogin = async () => {
+    setAuthLoading(true); setError('');
+    const d = await apiPost('/api/auth/login', { email, password });
+    setAuthLoading(false);
+    if (d.token) {
+      localStorage.setItem('jwt', d.token);
+      setToken(d.token);
+      setUser(d.user);
+      setView('search');
+    } else setError(d.error || 'Грешен имейл или парола');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('jwt');
+    setToken(''); setUser(null);
+  };
+
+  // ── Payment ───────────────────────────────────────────────
+  const handlePay = async (plan: 'trial' | 'starter' | 'pro' | 'business') => {
+    if (!user) { setView('auth'); setAuthMode('login'); setShowPaywall(false); return; }
+    setLoading(true);
+    const d = await apiPost('/api/checkout', { plan, email: user.email });
+    setLoading(false);
+    if (d.url) window.location.href = d.url;
+    else if (d.test_token) alert('Test mode: ' + d.test_token);
+    else setError(d.error || 'Грешка при плащане');
+  };
+
+  // ── Catalog filter ────────────────────────────────────────
+  const displayed = catalogQuery.trim()
+    ? catalog.filter(p =>
+        `${p.name} ${p.category} ${p.supplier} ${p.tags}`.toLowerCase().includes(catalogQuery.toLowerCase())
+      )
+    : catalog;
+
+  const planLabel: Record<string, string> = {
+    trial: 'Пробен', starter: 'Стартер', pro: 'Про', business: 'Business'
+  };
+  const actionsLeft = user ? user.actions_limit - user.actions_used : 0;
 
   return (
     <div className="min-h-screen bg-[#070a12] text-white font-sans">
+      {/* Background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-600/10 rounded-full blur-[200px]" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[200px]" />
@@ -125,21 +190,109 @@ export default function App() {
               <span className="text-[10px] text-blue-400 font-mono tracking-wider ml-2">B2B PLATFORM</span>
             </div>
           </div>
+
           <div className="flex items-center gap-3">
             <button onClick={() => setView('catalog')}
               className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
-              Каталог ({CATALOG.length})
+              Каталог
             </button>
-            <button onClick={() => setShowPaywall(true)}
-              className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 rounded-full">
-              от 9.90 EUR / месец →
-            </button>
+
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="text-right hidden sm:block">
+                  <div className="text-xs text-gray-400">{user.email}</div>
+                  <div className="text-xs">
+                    <span className="text-blue-400 font-bold">{planLabel[user.plan] || user.plan}</span>
+                    {user.plan === 'trial' && <span className="text-gray-500 ml-1">· {actionsLeft} действия</span>}
+                  </div>
+                </div>
+                {actionsLeft === 0 && (
+                  <button onClick={() => setShowPaywall(true)}
+                    className="text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-full hover:bg-blue-500/20 transition-all">
+                    Надгради
+                  </button>
+                )}
+                <button onClick={handleLogout} className="text-gray-500 hover:text-white transition-colors">
+                  <LogOut size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setView('auth'); setAuthMode('login'); }}
+                  className="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1.5">
+                  Вход
+                </button>
+                <button onClick={() => setShowPaywall(true)}
+                  className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 border border-blue-500/20 px-4 py-1.5 rounded-full">
+                  от 9.90 EUR / мес →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
       <AnimatePresence mode="wait">
-        {/* SEARCH VIEW */}
+
+        {/* ── AUTH VIEW ────────────────────────────────────── */}
+        {view === 'auth' && (
+          <motion.div key="auth" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="relative z-10 max-w-md mx-auto px-6 py-24">
+            <div className="bg-white/3 border border-white/10 rounded-3xl p-8">
+              <div className="flex items-center gap-3 mb-8">
+                <User size={20} className="text-blue-400" />
+                <h2 className="text-xl font-black">
+                  {authMode === 'login' ? 'Вход' : authMode === 'register' ? 'Регистрация' : 'Потвърди имейл'}
+                </h2>
+              </div>
+
+              {authMode !== 'confirm' && (
+                <>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="имейл@адрес.com"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 mb-3" />
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                    placeholder="парола"
+                    onKeyDown={e => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 mb-5" />
+                </>
+              )}
+
+              {authMode === 'confirm' && (
+                <div className="mb-5">
+                  <p className="text-gray-400 text-sm mb-4">Изпратихме 6-цифрен код на <strong>{email}</strong></p>
+                  <input type="text" value={confirmCode} onChange={e => setConfirmCode(e.target.value)}
+                    placeholder="000000" maxLength={6}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-white text-center text-2xl font-mono tracking-widest focus:outline-none focus:border-blue-500/50" />
+                </div>
+              )}
+
+              {error && <div className="text-red-400 text-sm mb-4 bg-red-400/10 rounded-xl px-4 py-3">{error}</div>}
+
+              <button
+                onClick={() => authMode === 'login' ? handleLogin() : authMode === 'register' ? handleRegister() : handleConfirm()}
+                disabled={authLoading}
+                className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 disabled:opacity-50 mb-4">
+                {authLoading ? <Loader2 size={18} className="animate-spin" /> :
+                  authMode === 'login' ? 'Влез' : authMode === 'register' ? 'Регистрирай се' : 'Потвърди'}
+              </button>
+
+              <p className="text-center text-sm text-gray-500">
+                {authMode === 'login' ? (
+                  <>Нямаш акаунт?{' '}
+                    <button onClick={() => { setAuthMode('register'); setError(''); }} className="text-blue-400 hover:underline">Регистрирай се</button>
+                  </>
+                ) : authMode === 'register' ? (
+                  <>Вече имаш акаунт?{' '}
+                    <button onClick={() => { setAuthMode('login'); setError(''); }} className="text-blue-400 hover:underline">Влез</button>
+                  </>
+                ) : null}
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── SEARCH VIEW ──────────────────────────────────── */}
         {view === 'search' && (
           <motion.div key="search" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
             className="relative z-10 max-w-4xl mx-auto px-6 py-24 text-center">
@@ -177,6 +330,7 @@ export default function App() {
                   {loading ? <Loader2 size={18} className="animate-spin" /> : 'Търси'}
                 </button>
               </div>
+              {error && <div className="text-red-400 text-sm mt-3 bg-red-400/10 rounded-xl px-4 py-3">{error}</div>}
             </motion.div>
 
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
@@ -201,7 +355,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* RESULT VIEW */}
+        {/* ── RESULT VIEW ──────────────────────────────────── */}
         {view === 'result' && demoResult && (
           <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="relative z-10 max-w-4xl mx-auto px-6 py-12">
@@ -209,7 +363,7 @@ export default function App() {
               className="flex items-center gap-2 text-gray-500 hover:text-white text-sm mb-8 transition-colors">
               ← Ново търсене
             </button>
-            <div className="text-xs text-blue-400 font-mono tracking-wider mb-4">ДЕМО РЕЗУЛТАТ — MiniSearch Engine (client-side)</div>
+            <div className="text-xs text-blue-400 font-mono tracking-wider mb-4">ДЕМО РЕЗУЛТАТ — 1 безплатно търсене</div>
 
             <div className="bg-white/3 border border-white/10 rounded-3xl p-8 mb-6">
               <div className="flex items-start justify-between gap-4 mb-6">
@@ -239,7 +393,8 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6">
+              {/* ROI */}
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-2xl p-6 mb-6">
                 <div className="flex items-center gap-2 mb-4">
                   <TrendingDown size={16} className="text-green-400" />
                   <span className="text-sm font-bold text-green-400">ROI ДОКАЗАТЕЛСТВО</span>
@@ -259,92 +414,76 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Landed Cost Calculator */}
+              {(() => {
+                const transport = Math.round(demoResult.weight_kg * 1.8 * lcQty);
+                const duties = Math.round(demoResult.negotiated_price * lcQty * 0.034);
+                const insurance = Math.round(demoResult.negotiated_price * lcQty * 0.008);
+                const totalCost = demoResult.negotiated_price * lcQty + transport + duties + insurance;
+                const sellPrice = totalCost / lcQty * (1 + lcMargin / 100);
+                const profit = (sellPrice - totalCost / lcQty) * lcQty;
+                return (
+                  <div className="bg-white/3 border border-white/10 rounded-2xl p-6 mb-6">
+                    <div className="flex items-center gap-2 mb-5">
+                      <Calculator size={16} className="text-blue-400" />
+                      <span className="text-sm font-bold text-blue-400">LANDED COST КАЛКУЛАТОР</span>
+                      <span className="text-xs text-gray-500 ml-auto">транспорт · мита · застраховка</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-5">
+                      <div>
+                        <div className="flex justify-between text-xs text-gray-400 mb-2">
+                          <span>Количество</span><span className="font-bold text-white">{lcQty} бр.</span>
+                        </div>
+                        <input type="range" min={1} max={200} value={lcQty} onChange={e => setLcQty(+e.target.value)}
+                          className="w-full accent-blue-500 cursor-pointer" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-gray-400 mb-2">
+                          <span>Твой марж</span><span className="font-bold text-white">{lcMargin}%</span>
+                        </div>
+                        <input type="range" min={10} max={80} value={lcMargin} onChange={e => setLcMargin(+e.target.value)}
+                          className="w-full accent-purple-500 cursor-pointer" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                      {[
+                        ['Продуктова цена', fmt(demoResult.negotiated_price * lcQty)],
+                        ['DHL транспорт', fmt(transport)],
+                        ['Мита (3.4%)', fmt(duties)],
+                        ['Застраховка (0.8%)', fmt(insurance)],
+                      ].map(([label, val]) => (
+                        <div key={label} className="flex justify-between bg-white/3 rounded-xl px-3 py-2">
+                          <span className="text-gray-500">{label}</span>
+                          <span className="font-semibold">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-2xl p-4">
+                      <div className="text-center">
+                        <div className="text-lg font-black">{fmtDec(totalCost / lcQty)}</div>
+                        <div className="text-xs text-gray-500">landed cost / бр.</div>
+                      </div>
+                      <div className="text-center border-l border-r border-white/10">
+                        <div className="text-lg font-black text-purple-400">{fmtDec(sellPrice)}</div>
+                        <div className="text-xs text-gray-500">продажна / бр.</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-black text-green-400">{fmt(profit)}</div>
+                        <div className="text-xs text-gray-500">чиста печалба</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Landed Cost Calculator */}
-            {demoResult && (() => {
-              const transport = Math.round(demoResult.weight_kg * 1.8 * lcQty);
-              const duties = Math.round(demoResult.negotiated_price * lcQty * 0.034);
-              const insurance = Math.round(demoResult.negotiated_price * lcQty * 0.008);
-              const totalCost = demoResult.negotiated_price * lcQty + transport + duties + insurance;
-              const sellPrice = totalCost / lcQty * (1 + lcMargin / 100);
-              const profit = (sellPrice - totalCost / lcQty) * lcQty;
-              return (
-                <div className="bg-white/3 border border-white/10 rounded-3xl p-6 mb-6">
-                  <div className="flex items-center gap-2 mb-5">
-                    <Calculator size={16} className="text-blue-400" />
-                    <span className="text-sm font-bold text-blue-400">LANDED COST КАЛКУЛАТОР</span>
-                    <span className="text-xs text-gray-500 ml-auto">включва транспорт · мита · застраховка</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mb-5">
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-400 mb-2">
-                        <span>Количество</span><span className="font-bold text-white">{lcQty} бр.</span>
-                      </div>
-                      <input type="range" min={1} max={200} value={lcQty} onChange={e => setLcQty(+e.target.value)}
-                        className="w-full accent-blue-500 cursor-pointer" />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-400 mb-2">
-                        <span>Твой марж</span><span className="font-bold text-white">{lcMargin}%</span>
-                      </div>
-                      <input type="range" min={10} max={80} value={lcMargin} onChange={e => setLcMargin(+e.target.value)}
-                        className="w-full accent-purple-500 cursor-pointer" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-                    {[
-                      ['Продуктова цена', fmt(demoResult.negotiated_price * lcQty)],
-                      ['DHL транспорт', fmt(transport)],
-                      ['Мита (3.4%)', fmt(duties)],
-                      ['Застраховка (0.8%)', fmt(insurance)],
-                    ].map(([label, val]) => (
-                      <div key={label} className="flex justify-between bg-white/3 rounded-xl px-3 py-2">
-                        <span className="text-gray-500">{label}</span>
-                        <span className="font-semibold">{val}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-2xl p-4">
-                    <div className="text-center">
-                      <div className="text-lg font-black">{fmtDec(totalCost / lcQty)}</div>
-                      <div className="text-xs text-gray-500">landed cost / бр.</div>
-                    </div>
-                    <div className="text-center border-l border-r border-white/10">
-                      <div className="text-lg font-black text-purple-400">{fmtDec(sellPrice)}</div>
-                      <div className="text-xs text-gray-500">продажна / бр.</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-lg font-black text-green-400">{fmt(profit)}</div>
-                      <div className="text-xs text-gray-500">чиста печалба</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Coming soon modules */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {[
-                { icon: Award, label: 'Trust Score (0–100)', sub: 'Верификация на доставчик · ISO/CE сертификати · рекламации', color: 'text-yellow-400' },
-                { icon: AlertTriangle, label: 'AI Риск Анализ', sub: 'Пристанищни забавяния · санкции · митнически ограничения', color: 'text-orange-400' },
-              ].map(({ icon: Icon, label, sub, color }) => (
-                <div key={label} className="bg-white/3 border border-white/10 rounded-2xl p-4 relative overflow-hidden">
-                  <div className="absolute top-2 right-2 text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold">Про план</div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Icon size={14} className={color} />
-                    <span className={`text-xs font-bold ${color}`}>{label}</span>
-                  </div>
-                  <div className="text-xs text-gray-500">{sub}</div>
-                </div>
-              ))}
-            </div>
-
+            {/* Locked features */}
             <div className="grid grid-cols-3 gap-4 mb-8 opacity-50">
               {[
-                { icon: Truck, label: 'DHL Логистика', sub: 'Шенджен → България' },
-                { icon: BarChart3, label: 'Ценови Одит', sub: 'vs Amazon & пазар' },
-                { icon: Brain, label: 'AI Препоръки', sub: 'HuggingFace ML модел' },
+                { icon: Truck, label: 'DHL Логистика', sub: 'Реална цена Шенджен → BG' },
+                { icon: BarChart3, label: 'Ценови Одит', sub: 'Google Shopping · 50+ оферти' },
+                { icon: Brain, label: 'AI Препоръки', sub: 'Подобни продукти · ML модел' },
               ].map(({ icon: Icon, label, sub }) => (
                 <div key={label} className="bg-white/3 border border-white/5 rounded-2xl p-4 relative">
                   <div className="absolute inset-0 bg-black/40 rounded-2xl backdrop-blur-[2px] flex items-center justify-center">
@@ -364,7 +503,7 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* CATALOG VIEW */}
+        {/* ── CATALOG VIEW ─────────────────────────────────── */}
         {view === 'catalog' && (
           <motion.div key="catalog" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="relative z-10 max-w-6xl mx-auto px-6 py-12">
@@ -375,42 +514,54 @@ export default function App() {
               </div>
             </div>
 
-            <div className="relative mb-6">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input value={catalogQuery} onChange={e => handleCatalogSearch(e.target.value)}
-                placeholder="Търси продукт, категория, доставчик..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 text-sm transition-all" />
-            </div>
+            {catalog.length === 0 ? (
+              <div className="text-center py-24 text-gray-500">
+                <Loader2 size={32} className="animate-spin mx-auto mb-4" />
+                Зарежда каталог...
+              </div>
+            ) : (
+              <>
+                <div className="relative mb-6">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                  <input value={catalogQuery} onChange={e => setCatalogQuery(e.target.value)}
+                    placeholder="Търси продукт, категория, доставчик..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 text-sm transition-all" />
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {displayed.map(p => (
-                <motion.div key={p.id} layout
-                  className="bg-white/3 border border-white/8 rounded-2xl p-5 hover:border-blue-500/30 transition-all cursor-pointer"
-                  onClick={() => { setDemoResult(p); setView('result'); setShowPaywall(false); }}>
-                  <div className="flex items-start justify-between mb-3">
-                    <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">{p.category}</span>
-                    <span className="text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">-{p.discount_pct}%</span>
-                  </div>
-                  <h3 className="font-semibold text-sm mb-2 leading-snug">{p.name}</h3>
-                  <p className="text-xs text-gray-500 mb-3">{p.supplier}</p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-black text-lg">{fmt(p.negotiated_price)}</div>
-                      <div className="text-xs text-gray-600 line-through">{fmt(p.factory_price)}</div>
-                    </div>
-                    <div className="text-right text-xs text-gray-500">
-                      <div>{p.delivery_days} дни</div>
-                      <div>MOQ {p.moq}</div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {displayed.slice(0, 60).map(p => (
+                    <motion.div key={p.id} layout
+                      className="bg-white/3 border border-white/8 rounded-2xl p-5 hover:border-blue-500/30 transition-all cursor-pointer"
+                      onClick={() => { setDemoResult(p); setView('result'); setShowPaywall(false); }}>
+                      <div className="flex items-start justify-between mb-3">
+                        <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">{p.category}</span>
+                        <span className="text-xs font-bold text-green-400 bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full">-{p.discount_pct}%</span>
+                      </div>
+                      <h3 className="font-semibold text-sm mb-2 leading-snug">{p.name}</h3>
+                      <p className="text-xs text-gray-500 mb-3">{p.supplier}</p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-black text-lg">{fmt(p.negotiated_price)}</div>
+                          <div className="text-xs text-gray-600 line-through">{fmt(p.factory_price)}</div>
+                        </div>
+                        <div className="text-right text-xs text-gray-500">
+                          <div>{p.delivery_days} дни</div>
+                          <div>MOQ {p.moq}</div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+                {displayed.length > 60 && (
+                  <p className="text-center text-gray-500 text-sm mt-6">Показани 60 от {displayed.length} — използвай търсачката</p>
+                )}
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* PAYWALL MODAL */}
+      {/* ── PAYWALL MODAL ────────────────────────────────────── */}
       <AnimatePresence>
         {showPaywall && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -427,7 +578,7 @@ export default function App() {
                   <Package size={24} />
                 </div>
                 <h2 className="text-2xl font-black mb-2">Отключи пълния достъп</h2>
-                <p className="text-gray-400 text-sm">Неограничено търсене · DHL логистика · AI предложения · Ценов одит</p>
+                <p className="text-gray-400 text-sm">Неограничено търсене · DHL логистика · AI препоръки · Ценов одит</p>
               </div>
 
               {demoResult && (
@@ -438,38 +589,50 @@ export default function App() {
                     <span className="font-bold text-green-400">{fmt(demoResult.factory_price - demoResult.negotiated_price)}</span>
                   </div>
                   <div className="flex justify-between text-sm mt-1 pt-2 border-t border-white/5">
-                    <span className="text-gray-400">ROI в посока 9,90 EUR/мес.</span>
+                    <span className="text-gray-400">ROI в посока 9.90 EUR/мес.</span>
                     <span className="font-black text-green-400">{Math.round((demoResult.factory_price - demoResult.negotiated_price) / 9.9)}x</span>
                   </div>
                 </div>
               )}
 
+              {error && <div className="text-red-400 text-sm mb-4 bg-red-400/10 rounded-xl px-4 py-3">{error}</div>}
+
+              {/* Plans */}
               <div className="grid grid-cols-3 gap-2 mb-5">
                 {[
-                  { name: 'Стартер', price: '9.90', desc: '50 търсения', features: ['Landed Cost', 'Trust Score'] },
-                  { name: 'Про', price: '49', desc: 'Неограничени', features: ['+ AI OCR', '+ Risk AI'], highlight: true },
-                  { name: 'Business', price: '149', desc: 'Multi-user', features: ['+ ERP Export', '+ Договори AI'] },
+                  { id: 'starter', name: 'Стартер', price: '9.90', desc: '50 търсения', features: ['Каталог', 'Landed Cost'] },
+                  { id: 'pro', name: 'Про', price: '49', desc: 'Неограничени', features: ['+ AI препоръки', '+ Ценов одит'], highlight: true },
+                  { id: 'business', name: 'Business', price: '149', desc: 'Multi-user', features: ['+ ERP export', '+ AI договори'] },
                 ].map(plan => (
-                  <div key={plan.name}
-                    className={`p-3 rounded-2xl border text-left ${plan.highlight ? 'border-blue-500/60 bg-blue-500/10' : 'border-white/10 bg-white/3'}`}>
+                  <button key={plan.id} onClick={() => handlePay(plan.id as any)}
+                    disabled={loading}
+                    className={`p-3 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 ${
+                      plan.highlight ? 'border-blue-500/60 bg-blue-500/10 hover:bg-blue-500/20' : 'border-white/10 bg-white/3 hover:bg-white/6'
+                    }`}>
                     <div className={`text-[11px] font-bold mb-1 ${plan.highlight ? 'text-blue-400' : 'text-gray-400'}`}>{plan.name}</div>
                     <div className="text-lg font-black">{plan.price} <span className="text-[10px] font-normal text-gray-400">€/мес</span></div>
                     <div className="text-[10px] text-gray-500 mt-0.5">{plan.desc}</div>
                     {plan.features.map(f => (
                       <div key={f} className="text-[10px] text-gray-600 mt-0.5">{f}</div>
                     ))}
-                  </div>
+                  </button>
                 ))}
               </div>
 
-              <a href={`mailto:${CONTACT_EMAIL}?subject=AI-Покупки достъп&body=Здравейте, искам достъп до AI-Покупки платформата.`}
-                className="w-full py-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl font-black text-base hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30">
-                Поръчай достъп
-                <ArrowRight size={20} />
-              </a>
+              <button onClick={() => handlePay('trial')} disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl font-black text-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 mb-3">
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <>Пробвай 1 търсене — 0.99 EUR <ArrowRight size={16} /></>}
+              </button>
+
+              {!user && (
+                <button onClick={() => { setShowPaywall(false); setView('auth'); setAuthMode('register'); }}
+                  className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-sm text-gray-400 hover:text-white hover:bg-white/8 transition-all">
+                  Нямаш акаунт? Регистрирай се безплатно
+                </button>
+              )}
 
               <p className="text-center text-xs text-gray-600 mt-3 flex items-center justify-center gap-2">
-                <ShieldCheck size={12} /> Отговор до 24ч · Банков превод или карта · {CONTACT_EMAIL}
+                <ShieldCheck size={12} /> Stripe · Сигурно плащане · Отказ по всяко време
               </p>
             </motion.div>
           </motion.div>

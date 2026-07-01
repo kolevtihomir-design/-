@@ -1,40 +1,48 @@
-# AI Trio Hub - Personal AI Assistant
+# AI-Покупки — B2B Платформа
 
-Това е пълнофункционално full-stack приложение, разработено за Тихомир Колев, което интегрира React (Vite) и Express (Node.js).
+Директен B2B достъп до индустриални продукти от производителя. Без прекупвачи. Средно 31% под пазарна цена.
 
-## 🧠 Функционалност
-Приложението е проектирано като **Персонален Команден Център**, базиран на три стълба:
-1.  **AI Анализ (Gemini AI)**: Обработка на сложни данни и генериране на стратегически планове.
-2.  **Дигитален Скенер (OCR & Media)**: Вкарване на данни чрез камера в реално време и качване на файлове.
-3.  **Синхронизация на работни потоци (ClickUp)**: Единен интерфейс за управление на задачи.
+## Технологии
 
-## 🛠️ Технически детайли
-- **Индустриални профили**: Динамична промяна на AI контекста според избраната сфера (Строителство, Кино, Земеделие, Здравеопазване).
-- **GDPR съвместимост**: Локално съхранение на данни и функция за пълно изтриване (Purge Data).
-- **Frontend**: React 19, Tailwind CSS, Framer Motion (анимации), Lucide Icons.
-- **Backend**: Express.js сървър, обслужващ API маршрути и Vite middleware за развитие.
+- **Frontend**: React 19, Vite, Tailwind CSS, Framer Motion, MiniSearch v7
+- **Backend**: Express.js, SQLite (better-sqlite3), JWT auth
+- **Плащания**: Stripe Checkout (trial 0.99 EUR / Стартер 9.90 EUR / Про 49 EUR / Business 149 EUR)
+- **Логистика**: Easyship API → weight-based fallback
+- **Ценов одит**: SerpAPI Google Shopping
+- **ML**: HuggingFace all-MiniLM-L6-v2 → TF-IDF fallback
+- **Deployment**: Vercel (frontend) + Google Cloud Run (backend)
 
-## 🚀 Стартиране на проекта
+## Стартиране
 
-### 1. Инсталация
 ```bash
 npm install
+npm run dev        # http://localhost:3000
 ```
 
-### 2. Конфигурация
-Създайте `.env` файл с вашия ключ:
-```env
-GEMINI_API_KEY=вашият_ключ
-```
+## Продукция
 
-### 3. Разработка (Development)
-```bash
-npm run dev
-```
-Сървърът работи на [http://localhost:3000](http://localhost:3000).
-
-### 4. Продукция (Production)
 ```bash
 npm run build
 npm start
+```
+
+## Environment Variables
+
+```env
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+EASYSHIP_API_KEY=prod_...
+HF_API_TOKEN=hf_...
+SERPAPI_KEY=...
+ADMIN_PASSWORD=...
+JWT_SECRET=...
+GMAIL_USER=...
+GMAIL_APP_PASSWORD=...
+APP_URL=https://...
+```
+
+## Seed каталог (20,000 продукта)
+
+```bash
+npx tsx scripts/seed-20k.ts
 ```
